@@ -1,0 +1,23 @@
+# Build outputs
+bin/
+
+# Config with real credentials — mount at runtime, never bake into image
+config/
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Git metadata
+.git/
+.gitignore
+
+# Docs
+*.md
+SETUP.md
+
+# Test files
+*_test.go

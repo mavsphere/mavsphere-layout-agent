@@ -1,0 +1,1552 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>MavSphere Layout Agent — Config</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    body { margin: 0; padding: 24px; background: #0b1220; color: #e8eefc; }
+    .card { max-width: 980px; margin: 0 auto; background: #111b2f; border: 1px solid #1f2b45; border-radius: 16px; padding: 24px; box-shadow: 0 8px 30px rgba(0,0,0,.3); }
+    h1 { margin: 0 0 12px; font-size: 22px; }
+    h2 { font-size: 16px; margin: 28px 0 12px; color: #9fb4ff; border-top: 1px solid #1f2b45; padding-top: 20px; }
+    h3 { margin: 16px 0 8px; font-size: 14px; color: #c8d8ff; }
+    label { display: block; margin: 10px 0 4px; font-size: 13px; color: #b6c6ff; }
+    input, select, textarea { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #23365e; background: #0e1830; color: #e8eefc; box-sizing: border-box; }
+    textarea { min-height: 80px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size: 12px; }
+    input[type="number"] { -moz-appearance: textfield; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .row4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+    .actions { margin-top: 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button { padding: 10px 16px; border-radius: 10px; border: 1px solid #2d4780; background: #1a2b52; color: #e8eefc; cursor: pointer; font-size: 14px; }
+    button.primary { background: #2e5aff; border-color: #2e5aff; font-weight: 600; }
+    button.danger { background: #5a1a1a; border-color: #8b2020; color: #ffb0b0; }
+    button.small { padding: 6px 10px; font-size: 12px; }
+    button[disabled] { opacity: .5; cursor: not-allowed; }
+    .muted { color: #a9b6d7; font-size: 12px; }
+    .ok   { color: #7cf58a; }
+    .warn { color: #ffd26b; }
+    .err  { color: #ff8b8b; }
+    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid #2d4780; background: #0e1830; }
+    .kbd  { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono"; background:#0b1a33; border:1px solid #21365f; padding:1px 6px; border-radius:6px; font-size:12px; }
+    .hint { margin-top: 5px; font-size: 12px; color: #8a9dbf; }
+    .field-note { margin-top: 4px; font-size: 11px; line-height: 1.3; }
+    .field-note.ok::before { content: '✓ '; }
+    .field-note.warn::before { content: '⚠ '; }
+    .field-note.err::before { content: '⚠ '; }
+    .inline-help { display:block; margin-top:4px; font-size:11px; color:#8a9dbf; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .status-row { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px; }
+    .status-item { display: flex; align-items: center; gap: 8px; }
+
+    /* Trains / Cameras table */
+    .list-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .list-table th { text-align: left; font-size: 12px; color: #7a90c0; padding: 6px 8px; border-bottom: 1px solid #1f2b45; }
+    .list-table td { padding: 6px 8px; border-bottom: 1px solid #161e35; vertical-align: top; }
+    /* Compact, aligned controls inside list tables.
+       Browser-native <select> elements are often taller than inputs unless
+       height/padding are forced, which made the camera Type column sit out of
+       alignment. */
+    .list-table td input,
+    .list-table td select {
+      width: 100%;
+      height: 30px;
+      min-height: 30px;
+      box-sizing: border-box;
+      padding: 0 8px;
+      border-radius: 8px;
+      border: 1px solid #23365e;
+      background: #0e1830;
+      color: #e8eefc;
+      font-size: 13px;
+      line-height: 30px;
+    }
+    .list-table td select {
+      padding-right: 24px;
+    }
+    .list-table td input[disabled] {
+      opacity: .45;
+      cursor: not-allowed;
+    }
+    .list-table tr:last-child td { border-bottom: none; }
+    .list-header { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; margin-bottom: 4px; }
+    .list-header h3 { margin: 0; }
+
+    .legal-banner {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid #4b3d16;
+      background: #20170a;
+      color: #ffdf9f;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .legal-banner strong { color: #ffe9b8; }
+    .legal-banner a { color: #ffd26b; text-decoration: underline; font-weight: 600; }
+
+    .degraded-banner {
+      display: none;
+      margin-bottom: 12px;
+      padding: 12px 16px;
+      background: #2a1010;
+      border: 1px solid #ff6b6b;
+      border-radius: 10px;
+      color: #ff8b8b;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    /* option-note: faint helper text directly under a <select> */
+    .option-note { margin-top: 4px; font-size: 11px; color: #6a80ac; line-height: 1.4; }
+    .option-note.best { color: #7cf58a; }
+    .option-note.warn { color: #ffd26b; }
+
+    /* live stream status box */
+    .stream-status-box {
+      margin-top: 14px;
+      padding: 12px 14px;
+      background: #0a1525;
+      border: 1px solid #1f2b45;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.8;
+    }
+    .stream-status-box .ss-label { color: #6a80ac; min-width: 130px; display: inline-block; }
+    .stream-status-box .ss-val   { color: #e8eefc; font-family: ui-monospace, Menlo, monospace; }
+    .stream-status-box .ss-row   { display: flex; gap: 6px; flex-wrap: wrap; align-items: baseline; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>MavSphere Layout Agent — Configuration</h1>
+  <p class="muted">Edit settings and restart the agent. Changes take effect on restart.</p>
+
+  <div class="legal-banner" role="note">
+    <strong>Operator notice:</strong>
+    Use of this agent is subject to the MavSphere Terms of Service, Acceptable Use Policy, and any applicable Operator agreements.
+    The local operator remains solely responsible for safe and lawful operation of all layout equipment at all times.
+    MavSphere relays control messages only and must not be relied upon as a safety or emergency-stop system.
+    <div style="margin-top:6px; font-size:12px;">
+      Full terms: <a id="legalLink" href="/legal" target="_blank" rel="noopener noreferrer">/legal</a>
+    </div>
+  </div>
+
+  <!-- STATUS -->
+  <h2>Status</h2>
+
+  <div id="degradedBanner" class="degraded-banner">
+    <strong>⚠ Agent error</strong><br>
+    <span id="degradedMsg"></span>
+  </div>
+
+  <div class="status-row">
+    <div class="status-item"><span class="pill">Backend STOMP</span> <span id="stStomp" class="muted">—</span></div>
+    <div class="status-item"><span class="pill" id="stCsLabel">Command Station</span> <span id="stCs" class="muted">—</span></div>
+    <div class="status-item"><span class="pill">Heartbeat</span>     <span id="stHB"    class="muted">—</span></div>
+    <div class="status-item"><span class="pill">Layout ID</span>     <span id="stLayout" class="muted">—</span></div>
+    <div class="status-item" id="stPhaseItem" style="display:none"><span class="pill">Phase</span> <span id="stPhase" class="muted">—</span></div>
+  </div>
+
+  <!-- LIVE STREAM STATUS -->
+  <h2>Live Stream Status</h2>
+  <p class="muted">Shows what the GStreamer pipeline is <em>actually</em> using right now — updated every 3 s while a stream is active. This is the ground truth; config values above are what was <em>requested</em>.</p>
+  <div class="stream-status-box" id="streamStatusBox">
+    <div class="ss-row"><span class="ss-label">Stream state</span><span class="ss-val" id="ssState">—</span></div>
+    <div class="ss-row"><span class="ss-label">Codec</span>       <span class="ss-val" id="ssCodec">—</span></div>
+    <div class="ss-row"><span class="ss-label">Encoder</span>     <span class="ss-val" id="ssEncoder">—</span></div>
+    <div class="ss-row"><span class="ss-label">Profile</span>     <span class="ss-val" id="ssProfile">—</span></div>
+    <div class="ss-row"><span class="ss-label">Resolution</span>  <span class="ss-val" id="ssResolution">—</span><span class="muted" style="font-size:11px;margin-left:6px;">(first camera)</span></div>
+    <div class="ss-row"><span class="ss-label">FPS</span>         <span class="ss-val" id="ssFps">—</span><span class="muted" style="font-size:11px;margin-left:6px;">(first camera)</span></div>
+    <div class="ss-row"><span class="ss-label">Capture fmt</span><span class="ss-val" id="ssPixFmt">—</span><span class="muted" style="font-size:11px;margin-left:6px;">(first camera)</span></div>
+    <div class="ss-row"><span class="ss-label">Encode bitrate</span><span class="ss-val" id="ssBitrate">—</span></div>
+    <div class="ss-row"><span class="ss-label">WebRTC max BR</span><span class="ss-val" id="ssWebrtcMax">—</span></div>
+    <div class="ss-row"><span class="ss-label">ICE state</span>  <span class="ss-val" id="ssIce">—</span><span class="muted" style="font-size:11px;margin-left:6px;">(first camera)</span></div>
+    <div class="ss-row"><span class="ss-label">Room ID</span>    <span class="ss-val" id="ssRoom">—</span><span class="muted" style="font-size:11px;margin-left:6px;">(first camera)</span></div>
+    <div id="ssCameras" style="margin-top:6px;"></div>
+    <div class="ss-row" style="margin-top:6px;"><span class="ss-label" style="color:#4a6080;">Pipeline</span><span class="ss-val" id="ssPipeline" style="font-size:10px;color:#5a7098;word-break:break-all;max-width:760px;"></span></div>
+  </div>
+
+  <!-- LAYOUT & BACKEND -->
+  <h2>Layout &amp; Backend</h2>
+  <div class="row">
+    <div>
+      <label for="layoutId">Layout ID</label>
+      <input id="layoutId" placeholder="1" />
+      <div class="hint">Must match the <span class="kbd">id</span> of the layout record in the MavSphere backend.</div>
+    </div>
+    <div>
+      <label for="allowControl">Allow Control</label>
+      <select id="allowControl">
+        <option value="true">true</option>
+        <option value="false">false (view-only)</option>
+      </select>
+      <div class="hint">When false the agent connects and sends telemetry but ignores train control commands.</div>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="backendUrl">Backend URL (HTTP)</label>
+      <input id="backendUrl" placeholder="http://localhost:8080" />
+      <div class="hint">e.g. <span class="kbd">https://mavsphere.com</span> in production.</div>
+    </div>
+    <div>
+      <label for="backendWsUrl">Backend WS URL (STOMP)</label>
+      <input id="backendWsUrl" placeholder="ws://localhost:8080/api/ws/agent" />
+      <div class="hint">e.g. <span class="kbd">wss://mavsphere.com/api/ws/agent</span></div>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="username">Username</label>
+      <input id="username" autocomplete="username" />
+    </div>
+    <div>
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password" />
+    </div>
+  </div>
+
+  <!-- DCC-EX & MQTT -->
+  <h2>DCC-EX &amp; MQTT</h2>
+  <div class="row">
+    <div>
+      <label for="dccExPort">DCC-EX Port (/dev/ttyUSB0 or host:port)</label>
+      <input id="dccExPort" placeholder="/dev/ttyUSB0 or 192.168.1.50:2560" />
+      <div class="hint">Enter either a serial device such as <span class="kbd">/dev/ttyUSB0</span> or a plain TCP endpoint such as <span class="kbd">192.168.1.50:2560</span>.</div>
+    </div>
+    <div>
+      <label for="mqttBrokerUrl">MQTT Broker URL (tcp://host:1883)</label>
+      <input id="mqttBrokerUrl" placeholder="tcp://localhost:1883" />
+      <div class="hint">Local broker used for layout sensor nodes, signal controllers, and other local MQTT-connected devices.</div>
+    </div>
+  </div>
+  <p class="muted">
+    Use a direct serial device path such as <span class="kbd">/dev/ttyUSB0</span> or a plain TCP endpoint such as
+    <span class="kbd">192.168.1.50:2560</span>. For MQTT, use your local broker URL such as
+    <span class="kbd">tcp://localhost:1883</span>.
+  </p>
+
+  <!-- JANUS / VIDEO -->
+  <h2>Video (Janus WebRTC)</h2>
+  <div class="row">
+    <div>
+      <label for="janusUrl">Janus WS URL</label>
+      <input id="janusUrl" placeholder="ws://localhost:8188/janus" />
+      <div class="hint">e.g. <span class="kbd">wss://mavsphere.com/janus</span></div>
+    </div>
+    <div>
+      <label for="forceRelay">ICE / relay override</label>
+      <select id="forceRelay">
+        <option value="">Auto (follow backend policy)</option>
+        <option value="true">Force relay (TURN only)</option>
+        <option value="false">Force all (allow STUN/direct)</option>
+      </select>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="videoCodec">Video codec</label>
+      <select id="videoCodec" onchange="updateVideoHints()">
+        <option value="h264">H.264 ★ recommended</option>
+        <option value="vp8">VP8 (software only, fallback)</option>
+        <option value="auto">auto (try H.264, fall back to VP8)</option>
+      </select>
+      <div class="option-note best" id="hintCodec"></div>
+    </div>
+    <div>
+      <label for="h264Encoder">H.264 encoder</label>
+      <select id="h264Encoder" onchange="updateVideoHints()">
+        <option value="auto">auto ★ recommended</option>
+        <option value="v4l2h264enc">v4l2h264enc — Pi hardware only</option>
+        <option value="x264enc">x264enc — PC / Ubuntu software</option>
+      </select>
+      <div class="option-note" id="hintEncoder"></div>
+    </div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="h264Profile">H.264 profile</label>
+      <select id="h264Profile" onchange="updateVideoHints()">
+        <option value="constrained-baseline">constrained-baseline ★ best compat</option>
+        <option value="baseline">baseline — broadly compatible</option>
+        <option value="main">main — better compression, modern only</option>
+        <option value="high">high — best compression, desktop only</option>
+      </select>
+      <div class="option-note" id="hintProfile"></div>
+    </div>
+    <div><!-- spacer --></div>
+  </div>
+
+  <h3 style="margin-top:18px;">Bitrate</h3>
+  <p class="muted" style="margin-top:0;">
+    <strong>Encode bitrate</strong> is the target passed to the GStreamer encoder.
+    <strong>WebRTC max</strong> is the ceiling for the GCC congestion controller (should be &ge; encode bitrate).
+    <strong>WebRTC start</strong> is the initial probe rate (~50% of max is a safe default).
+    <strong>WebRTC min</strong> is the floor GCC won&rsquo;t drop below.
+  </p>
+  <div class="row4" id="bitrateRow">
+    <div>
+      <label for="h264BitrateBps">Encode bitrate (bps)</label>
+      <select id="h264BitrateBps" onchange="updateVideoHints()">
+        <option value="1000000">1 000 000 — 1 Mbps</option>
+        <option value="1500000">1 500 000 — 1.5 Mbps (Pi default)</option>
+        <option value="2000000">2 000 000 — 2 Mbps</option>
+        <option value="2500000">2 500 000 — 2.5 Mbps</option>
+        <option value="3000000">3 000 000 — 3 Mbps ★ PC recommended</option>
+        <option value="4000000">4 000 000 — 4 Mbps</option>
+        <option value="6000000">6 000 000 — 6 Mbps (high-end PC)</option>
+      </select>
+      <div class="option-note" id="hintBitrate"></div>
+    </div>
+    <div>
+      <label for="webrtcMaxBitrateBps">WebRTC max bitrate (bps)</label>
+      <select id="webrtcMaxBitrateBps">
+        <option value="1000000">1 000 000 — 1 Mbps</option>
+        <option value="1500000">1 500 000 — 1.5 Mbps</option>
+        <option value="2000000">2 000 000 — 2 Mbps</option>
+        <option value="2500000">2 500 000 — 2.5 Mbps</option>
+        <option value="3000000">3 000 000 — 3 Mbps</option>
+        <option value="4000000">4 000 000 — 4 Mbps</option>
+        <option value="6000000">6 000 000 — 6 Mbps</option>
+      </select>
+      <div class="hint">Auto-set to match encode bitrate. Increase here to let GCC probe higher on good links.</div>
+    </div>
+    <div>
+      <label for="webrtcStartBitrateBps">WebRTC start bitrate (bps)</label>
+      <select id="webrtcStartBitrateBps">
+        <option value="300000">300 000 — 0.3 Mbps</option>
+        <option value="500000">500 000 — 0.5 Mbps</option>
+        <option value="750000">750 000 — 0.75 Mbps</option>
+        <option value="800000">800 000 — 0.8 Mbps</option>
+        <option value="1000000">1 000 000 — 1 Mbps</option>
+        <option value="1250000">1 250 000 — 1.25 Mbps</option>
+        <option value="1500000">1 500 000 — 1.5 Mbps</option>
+        <option value="2000000">2 000 000 — 2 Mbps</option>
+        <option value="2500000">2 500 000 — 2.5 Mbps</option>
+        <option value="3000000">3 000 000 — 3 Mbps</option>
+      </select>
+      <div class="hint">Auto-set to ~50% of max. Lower for cautious ramp-up on flaky links.</div>
+    </div>
+    <div>
+      <label for="webrtcMinBitrateBps">WebRTC min bitrate (bps)</label>
+      <select id="webrtcMinBitrateBps">
+        <option value="150000">150 000 — 0.15 Mbps</option>
+        <option value="200000">200 000 — 0.2 Mbps</option>
+        <option value="300000">300 000 — 0.3 Mbps</option>
+        <option value="500000">500 000 — 0.5 Mbps</option>
+      </select>
+      <div class="hint">Floor GCC won&rsquo;t drop below.</div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:18px;">Resolution &amp; capture</h3>
+  <div class="row">
+    <div>
+      <label for="videoResolution">Resolution</label>
+      <select id="videoResolution">
+        <option value="320x180">320×180</option>
+        <option value="640x360">640×360</option>
+        <option value="854x480">854×480</option>
+        <option value="960x540">960×540</option>
+        <option value="1280x720">1280×720 (720p)</option>
+        <option value="1920x1080">1920×1080 (1080p)</option>
+      </select>
+    </div>
+    <div>
+      <label for="videoFps">Frame rate</label>
+      <select id="videoFps">
+        <option value="10">10 fps</option>
+        <option value="15">15 fps</option>
+        <option value="20">20 fps</option>
+        <option value="25">25 fps</option>
+        <option value="30">30 fps</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+      <input type="checkbox" id="preferMjpg" />
+      <label for="preferMjpg" style="margin:0;font-weight:normal;">Prefer MJPG capture (uncheck if camera shows &ldquo;device busy&rdquo; errors)</label>
+    </div>
+  </div>
+
+  <!-- TRAINS -->
+  <h2>Trains</h2>
+  <p class="muted">Trains are configured in the <strong>MavSphere UI → Manage Layouts</strong>. This list is loaded from the backend at agent startup and is read-only here.</p>
+
+  <div class="list-header">
+    <h3>Train list</h3>
+    <span class="muted" style="font-size:13px;font-style:italic">Read-only — configure in MavSphere</span>
+  </div>
+  <table class="list-table" id="trainsTable">
+    <thead>
+      <tr>
+        <th>Train ID</th>
+        <th>Slug</th>
+        <th>DCC Address</th>
+        <th>Display Name</th>
+        <th>Guarding Signal</th>
+        <th>Start Block</th>
+      </tr>
+    </thead>
+    <tbody id="trainRows"></tbody>
+  </table>
+  <p id="noTrains" class="muted" style="display:none">No trains loaded. Check backend connection and agent logs.</p>
+
+  <!-- CAMERAS -->
+  <h2>Cameras</h2>
+  <p class="muted">Each camera is published as a separate WebRTC stream via Janus. Leave the list empty if you have no cameras. Camera IDs are generated automatically from the camera name.</p>
+
+  <div class="list-header">
+    <h3>Camera list</h3>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="small" id="btnCheckCameras">⟳ Check cameras</button>
+      <button class="small" id="btnScanCameras">🔍 Scan for cameras</button>
+      <button class="small" id="btnAddCamera">+ Add camera</button>
+    </div>
+  </div>
+  <table class="list-table" id="camerasTable">
+    <thead>
+      <tr>
+        <th>Camera name</th>
+        <th>Type</th>
+        <th>Device</th>
+        <th>Resolution</th>
+        <th>FPS</th>
+        <th>Train (ONBOARD only)</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="cameraRows"></tbody>
+  </table>
+  <datalist id="trainSlugOptions"></datalist>
+  <p id="noCameras" class="muted" style="display:none">No cameras configured.</p>
+
+  <!-- Camera scan results panel -->
+  <div id="camScanPanel" style="display:none;margin-top:12px;padding:12px;background:#0a1625;border:1px solid #1f2b45;border-radius:10px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <strong style="font-size:13px;">Available video devices</strong>
+      <button class="small" onclick="document.getElementById('camScanPanel').style.display='none'">✕ Close</button>
+    </div>
+    <div id="camScanContent"></div>
+  </div>
+
+  <!-- FAILSAFE -->
+  <!-- JMRI Integration -->
+  <h2>JMRI Integration (optional)</h2>
+  <p class="muted">
+    Enable this section if you run JMRI locally alongside the layout agent.
+    When enabled, the agent reverse-proxies JMRI's web panels (Layout Editor,
+    Control Panel, Switchboard) at <span class="kbd">http://&lt;agent&gt;:8091/jmri/</span>,
+    so MavSphere can surface them inside the drive view.
+    The JMRI web throttle is intentionally blocked — train control stays in MavSphere's own HUD.
+  </p>
+  <div class="row">
+    <div>
+      <label for="jmriEnabled">JMRI proxy</label>
+      <select id="jmriEnabled">
+        <option value="false">Disabled</option>
+        <option value="true">Enabled</option>
+      </select>
+    </div>
+    <div>
+      <label for="jmriUrl">JMRI web server URL</label>
+      <input id="jmriUrl" placeholder="http://localhost:12080" />
+      <div class="hint">Default JMRI web port is 12080. Use <span class="kbd">http://localhost:12080</span> if running on the same machine.</div>
+    </div>
+  </div>
+  <div id="jmriPanelSection" style="display:none;margin-top:0.75rem">
+    <button id="btnFetchPanels" class="small">↻ Detect JMRI panels</button>
+    <span id="jmriPanelStatus" class="muted" style="margin-left:0.5rem"></span>
+    <div id="jmriPanelList" style="margin-top:0.5rem"></div>
+    <p class="muted" style="margin-top:0.5rem">
+      Use these URLs inside MavSphere's layout editor when configuring JMRI panel entries.
+      Open any URL in a browser tab to verify the panel loads before adding it.
+    </p>
+  </div>
+
+  <h2>Safety &amp; Failsafe</h2>
+  <p class="muted">
+    Dead-man switch: if the agent stops receiving control commands from the backend, it immediately issues an emergency stop to all trains.
+    The stop is re-issued repeatedly until commands resume.
+  </p>
+  <div class="row">
+    <div>
+      <label for="fsControlTimeoutMs">Control timeout (ms)</label>
+      <input id="fsControlTimeoutMs" type="number" min="100" max="5000" step="50" placeholder="450" />
+      <div class="hint">E-stop fires if no command is received within this window. Default: 450 ms.</div>
+    </div>
+    <div>
+      <label for="fsReissueStopMs">Re-issue stop every (ms)</label>
+      <input id="fsReissueStopMs" type="number" min="100" max="5000" step="50" placeholder="500" />
+      <div class="hint">Interval at which E-stop is re-sent while stale. Default: 500 ms.</div>
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="actions">
+    <button class="primary" id="btnSaveRestart">Save &amp; Restart Agent</button>
+    <button id="btnSave">Save only (no restart)</button>
+    <span id="statusMsg" class="muted"></span>
+  </div>
+
+  <!-- HELP -->
+  <h2>Setup guide</h2>
+
+  <h3>Step 1 — Create a layout in MavSphere</h3>
+  <p class="muted">
+    In the MavSphere UI, create a railway layout and note its numeric
+    <span class="kbd">Layout ID</span>. Enter that same value in the
+    <strong>Layout ID</strong> field above.
+  </p>
+
+  <h3>Step 2 — Configure backend access</h3>
+  <p class="muted">
+    Enter the backend HTTP URL, backend WebSocket URL, and your MavSphere login credentials.
+    The agent logs into the backend, fetches train and topology data, and subscribes to control messages.
+  </p>
+
+  <h3>Step 3 — Configure DCC-EX</h3>
+  <p class="muted">
+    In <strong>DCC-EX Port</strong>, enter either:
+  </p>
+  <ul class="muted" style="margin-top:8px; line-height:1.6;">
+    <li><span class="kbd">/dev/ttyUSB0</span> or similar for a direct serial connection</li>
+    <li><span class="kbd">host:port</span> for a TCP connection, for example <span class="kbd">192.168.1.50:2560</span></li>
+  </ul>
+  <p class="muted">
+    Do not include <span class="kbd">http://</span>, <span class="kbd">ws://</span>, or any path.
+    Use only a serial device path or a plain <span class="kbd">host:port</span> value.
+  </p>
+
+  <h3>Step 4 — Configure MQTT</h3>
+  <p class="muted">
+    Set the MQTT broker URL used by local layout devices such as sensor nodes and signal controllers.
+    In most deployments this will be the local Mosquitto broker, for example
+    <span class="kbd">tcp://localhost:1883</span>.
+  </p>
+
+  <h3>Step 5 — Configure trains in MavSphere</h3>
+  <p class="muted">
+    Trains are managed in the MavSphere UI, not in this page.
+    For each train, configure its DCC address, slug, display name, guarding signal, and start block.
+    The agent fetches the train list from the backend at startup and displays it here as read-only.
+  </p>
+
+  <h3>Step 6 — Configure cameras</h3>
+  <p class="muted">
+    Add any local camera devices you want the agent to publish through Janus WebRTC.
+    Enter a friendly <strong>Camera name</strong>; the agent generates the internal camera ID automatically from that name.
+    Use <strong>Scan for cameras</strong> to find capture devices and supported modes. Typical Linux device paths are <span class="kbd">/dev/video0</span> and <span class="kbd">/dev/video2</span>.
+    Use camera type <strong>ONBOARD</strong> only when a camera should be tied to a specific train. The train field can be selected from the detected train list or typed manually if the train has not been created yet.
+  </p>
+
+  <h3>Step 7 — Start and verify</h3>
+  <p class="muted">
+    Start the agent and watch the <strong>Status</strong> panel above.
+    <strong>Backend STOMP</strong> and <strong>DCC-EX</strong> should both go green.
+    If cameras are configured, the backend can then request streams from the agent via Janus.
+  </p>
+
+  <h3>Video quality quick-reference</h3>
+  <p class="muted">
+    <strong>Pi (Raspberry Pi 4/5):</strong>
+    codec = H.264, encoder = <span class="kbd">auto</span> or <span class="kbd">v4l2h264enc</span>,
+    profile = constrained-baseline, encode bitrate = 1.5–2 Mbps.
+    The Pi hardware encoder disables GCC congestion control; bitrate is fixed at whatever you set.
+  </p>
+  <p class="muted">
+    <strong>PC / Ubuntu desktop:</strong>
+    codec = H.264, encoder = <span class="kbd">auto</span> (resolves to <span class="kbd">x264enc</span>),
+    profile = constrained-baseline, encode bitrate = 2–4 Mbps.
+    GCC congestion control remains active; the stream adapts to available bandwidth up to WebRTC max.
+  </p>
+  <p class="muted">
+    Check the <strong>Live Stream Status</strong> panel while a stream is running to confirm what is actually being used.
+    The agent logs also print <span class="kbd">[stream] starting gst-launch &hellip;</span> with the full pipeline on each start.
+  </p>
+
+  <h3>Troubleshooting</h3>
+  <p class="muted">
+    If DCC-EX does not connect:
+  </p>
+  <ul class="muted" style="margin-top:8px; line-height:1.6;">
+    <li>For TCP, confirm the value is plain <span class="kbd">host:port</span> and not a URL</li>
+    <li>If using TCP, confirm the DCC-EX device or bridge is actually listening on the configured port</li>
+    <li>For serial, confirm the device path exists and is accessible inside the container</li>
+    <li>Check the agent logs for connection errors</li>
+  </ul>
+  <p class="muted">
+    If video does not start:
+  </p>
+  <ul class="muted" style="margin-top:8px; line-height:1.6;">
+    <li>Check the <strong>Live Stream Status</strong> panel — if codec shows <span class="kbd">—</span> no stream is running</li>
+    <li>Check agent logs for <span class="kbd">[stream] starting gst-launch</span> and any errors that follow</li>
+    <li>Confirm the camera device exists at the configured <span class="kbd">/dev/videoX</span> path</li>
+    <li>Try a lower resolution or frame rate</li>
+    <li>Check Janus connectivity and ICE/TURN configuration if WebRTC sessions fail</li>
+    <li>Run <span class="kbd">gst-inspect-1.0 x264enc</span> to confirm the encoder plugin is installed</li>
+  </ul>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const statusMsg = $('statusMsg');
+
+  // Full config as last loaded from disk. Saves merge UI fields into this
+  // object so newer/unknown config fields are not wiped by the browser.
+  let lastLoadedConfig = null;
+  let configRevision = '';
+  let formDirty = false;
+  let loadingConfig = false;
+  let savingConfig = false;
+  let lastSaveCompletedAt = 0; // timestamp of last successful save, used to debounce pollConfigRevision
+
+  function cloneConfig(obj) {
+    return JSON.parse(JSON.stringify(obj || {}));
+  }
+
+  function setStatus(msg, cls = 'muted') {
+    statusMsg.textContent = msg;
+    statusMsg.className = cls;
+  }
+
+  function markFormDirty() {
+    if (!loadingConfig && !savingConfig) formDirty = true;
+  }
+
+  document.addEventListener('input', markFormDirty, true);
+  document.addEventListener('change', markFormDirty, true);
+
+  // ---- Janus URL derivation ----
+  function defaultJanusFromBackend(backendUrl) {
+    try {
+      const u = new URL(backendUrl);
+      const scheme = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${scheme}//${u.host}/janus`;
+    } catch { return 'ws://localhost:8188/janus'; }
+  }
+
+  function defaultWsFromBackend(backendUrl) {
+    try {
+      const u = new URL(backendUrl);
+      const scheme = u.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${scheme}//${u.host}/api/ws/agent`;
+    } catch { return 'ws://localhost:8080/api/ws/agent'; }
+  }
+
+  // ---- Legal link ----
+  function updateLegalLink() {
+    const backendUrl = ($('backendUrl')?.value || '').trim();
+    const link = $('legalLink');
+    if (!link) return;
+    try {
+      const u = new URL(backendUrl);
+      link.href = `${u.origin}/legal`;
+      link.textContent = `${u.origin}/legal`;
+    } catch {
+      link.href = '/legal';
+      link.textContent = '/legal';
+    }
+  }
+  $('backendUrl').addEventListener('input', updateLegalLink);
+
+  // Auto-derive backendWsUrl from backendUrl when field is empty
+  $('backendUrl').addEventListener('blur', () => {
+    const ws = $('backendWsUrl').value.trim();
+    if (!ws) {
+      $('backendWsUrl').value = defaultWsFromBackend($('backendUrl').value.trim());
+    }
+  });
+
+  // ---- Video setting hints ----
+  function updateVideoHints() {
+    const codec   = $('videoCodec').value;
+    const encoder = $('h264Encoder').value;
+    const profile = $('h264Profile').value;
+    const bitrate = Number($('h264BitrateBps').value);
+
+    const isH264 = codec === 'h264' || codec === 'auto';
+    const isPi   = encoder === 'v4l2h264enc';
+
+    const hintCodec = $('hintCodec');
+    if (codec === 'h264')      { hintCodec.textContent = '✓ Best quality and compatibility. Recommended for all deployments.'; hintCodec.className = 'option-note best'; }
+    else if (codec === 'auto') { hintCodec.textContent = '✓ Good default — will use H.264 where available.'; hintCodec.className = 'option-note best'; }
+    else                       { hintCodec.textContent = '⚠ VP8 software encode only. Lower quality at same bitrate. Use H.264 if possible.'; hintCodec.className = 'option-note warn'; }
+
+    const hintEncoder = $('hintEncoder');
+    if (!isH264)                        { hintEncoder.textContent = 'Encoder not used (VP8 path). GCC adaptive bitrate: active.'; hintEncoder.className = 'option-note'; }
+    else if (encoder === 'auto')        { hintEncoder.textContent = '✓ Recommended. Probes for Pi HW encoder at runtime; falls back to x264enc on PC. GCC adaptive bitrate: active on PC, disabled on Pi (fixed bitrate).'; hintEncoder.className = 'option-note best'; }
+    else if (encoder === 'v4l2h264enc') { hintEncoder.textContent = '⚠ Pi hardware only. GCC adaptive bitrate: DISABLED — encode bitrate is fixed at configured value. Do not use on PC/Ubuntu.'; hintEncoder.className = 'option-note warn'; }
+    else if (encoder === 'x264enc')     { hintEncoder.textContent = '✓ Correct for PC/Ubuntu. GCC adaptive bitrate: ACTIVE — stream adapts between WebRTC min and WebRTC max based on network conditions.'; hintEncoder.className = 'option-note best'; }
+
+    const hintProfile = $('hintProfile');
+    if (!isH264)                                     { hintProfile.textContent = 'Profile not used (VP8 path)'; hintProfile.className = 'option-note'; }
+    else if (profile === 'constrained-baseline') { hintProfile.textContent = '✓ Best choice. Matches Teams/Zoom/Meet. Compatible with all browsers and mobile devices.'; hintProfile.className = 'option-note best'; }
+    else if (profile === 'baseline')             { hintProfile.textContent = '✓ Broadly compatible, slightly looser than constrained-baseline.'; hintProfile.className = 'option-note best'; }
+    else if (profile === 'main')                 { hintProfile.textContent = 'Better compression. Some older mobile decoders may have trouble.'; hintProfile.className = 'option-note'; }
+    else if (profile === 'high')                 { hintProfile.textContent = '⚠ Best compression but modern desktop/browser only. Avoid for mobile viewers.'; hintProfile.className = 'option-note warn'; }
+
+    const hintBitrate = $('hintBitrate');
+    if (!isH264)                        { hintBitrate.textContent = 'Bitrate not used for VP8 (GCC controls it).'; hintBitrate.className = 'option-note'; }
+    else if (isPi && bitrate > 2000000) { hintBitrate.textContent = '⚠ Pi HW encoder may struggle above 2 Mbps at 1080p. 1.5–2 Mbps is the sweet spot.'; hintBitrate.className = 'option-note warn'; }
+    else if (isPi)                      { hintBitrate.textContent = '✓ Good for Pi hardware encoder.'; hintBitrate.className = 'option-note best'; }
+    else if (bitrate >= 3000000)        { hintBitrate.textContent = '✓ Good for PC. Enough for 720p motion content with x264enc.'; hintBitrate.className = 'option-note best'; }
+    else if (bitrate < 2000000)         { hintBitrate.textContent = '⚠ Low for PC software encode. 2–4 Mbps is recommended for 720p vehicle content.'; hintBitrate.className = 'option-note warn'; }
+    else                                { hintBitrate.textContent = ''; hintBitrate.className = 'option-note'; }
+
+    // Auto-sync WebRTC max and start whenever encode bitrate changes.
+    // Max always tracks encode bitrate (user can override manually after).
+    // Start always tracks 50% of max.
+    const webrtcMaxEl   = $('webrtcMaxBitrateBps');
+    const webrtcStartEl = $('webrtcStartBitrateBps');
+    if (isH264 && bitrate > 0) {
+      setSelectNearest(webrtcMaxEl, bitrate);
+      const newMax = Number(webrtcMaxEl.value);
+      setSelectNearest(webrtcStartEl, Math.round(newMax * 0.5));
+    }
+
+    $('bitrateRow').style.display = isH264 ? '' : 'none';
+    $('h264Profile').closest('div').parentElement.style.display = isH264 ? '' : 'none';
+  }
+  ['videoCodec','h264Encoder','h264Profile','h264BitrateBps'].forEach(id => {
+    $(id).addEventListener('change', updateVideoHints);
+  });
+
+  // ---- setSelectNearest ----
+  // Snaps a <select> to the option whose numeric value is closest to `value`.
+  function setSelectNearest(el, value) {
+    const options = Array.from(el.options).map(o => Number(o.value)).filter(v => !isNaN(v));
+    if (options.length === 0) { el.value = value; return; }
+    const closest = options.reduce((a, b) => Math.abs(b - value) < Math.abs(a - value) ? b : a);
+    el.value = String(closest);
+  }
+
+  // ---- Train rows (read-only) ----
+  let trains = [];
+
+  function renderTrains() {
+    const tbody = $('trainRows');
+    tbody.innerHTML = '';
+    $('noTrains').style.display = trains.length === 0 ? 'block' : 'none';
+    trains.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="text-align:center;color:#8899cc">${t.trainId || '—'}</td>
+        <td style="color:#e8eefc;font-weight:500">${esc(t.trainSlug)}</td>
+        <td style="text-align:center;color:#8899cc">${t.dccAddress || '—'}</td>
+        <td style="color:#8899cc">${esc(t.displayName)}</td>
+        <td style="color:#8899cc;font-family:monospace">${esc(t.guardingSignal || '—')}</td>
+        <td style="color:#8899cc;font-family:monospace">${esc(t.startBlock || '—')}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    renderTrainSlugOptions();
+  }
+
+  function renderTrainSlugOptions() {
+    const list = $('trainSlugOptions');
+    if (!list) return;
+    list.innerHTML = '';
+    trains
+      .filter(t => String(t.trainSlug || '').trim())
+      .forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = String(t.trainSlug || '').trim();
+        const bits = [];
+        if (t.displayName) bits.push(t.displayName);
+        if (t.dccAddress) bits.push('DCC ' + t.dccAddress);
+        opt.label = bits.join(' — ');
+        list.appendChild(opt);
+      });
+  }
+
+  // ---- Camera rows ----
+  let cameras = [];
+  let camStatuses = {}; // key: cameraId → {ok, error, caps, label}
+  const camTypes = ['STATION', 'YARD', 'OVERVIEW', 'ONBOARD'];
+
+  // Returns the best-matching mode from a caps.modes array for the given
+  // wantW/wantH/wantFps, mirroring the Go BestMatch scoring in video_caps.go.
+  function bestMatchMode(modes, wantW, wantH, wantFps) {
+    if (!modes || modes.length === 0) return null;
+    let best = null, bestScore = Infinity;
+    modes.forEach(m => {
+      const dw = Math.abs(wantW - m.width);
+      const dh = Math.abs(wantH - m.height);
+      let bestFpsDiff = 0;
+      if (wantFps > 0 && m.fps && m.fps.length > 0) {
+        bestFpsDiff = Math.min(...m.fps.map(f => Math.abs(wantFps - f)));
+      }
+      const score = dw*dw + dh*dh + bestFpsDiff*bestFpsDiff;
+      if (score < bestScore) { bestScore = score; best = m; }
+    });
+    return best;
+  }
+
+  // Reads the current global video settings from the UI dropdowns.
+  function currentVideoSettings() {
+    const [vw, vh] = ($('videoResolution').value || '1280x720').split('x').map(Number);
+    return {
+      width:      vw || 1280,
+      height:     vh || 720,
+      fps:        Number($('videoFps').value) || 25,
+      codec:      $('videoCodec').value || 'vp8',
+      preferMjpg: $('preferMjpg').checked,
+    };
+  }
+
+  // Given a check result and the current video settings, returns an array of
+  // warning strings (empty = no warnings).
+  function capsWarnings(st) {
+    if (!st || !st.ok || !st.caps || !st.caps.modes) return [];
+    const modes = st.caps.modes;
+    const { width, height, fps, preferMjpg } = currentVideoSettings();
+    const warnings = [];
+
+    // 1. Check if requested resolution exists at all (exact match)
+    const exactRes = modes.find(m => m.width === width && m.height === height);
+    if (!exactRes) {
+      // Find the best snap-to mode
+      const best = bestMatchMode(modes, width, height, fps);
+      if (best) {
+        warnings.push(`${width}x${height} not supported — will snap to ${best.width}x${best.height}`);
+      } else {
+        warnings.push(`${width}x${height} not supported by this device`);
+      }
+    } else {
+      // Resolution exists — check fps within that resolution
+      const fpsOk = exactRes.fps && exactRes.fps.includes(fps);
+      if (!fpsOk && exactRes.fps && exactRes.fps.length > 0) {
+        const nearest = exactRes.fps.reduce((a, b) => Math.abs(b - fps) < Math.abs(a - fps) ? b : a);
+        warnings.push(`${fps}fps not available at ${width}x${height} — nearest is ${nearest}fps`);
+      }
+    }
+
+    // 2. If preferMjpg is on, warn if no MJPG modes exist at all
+    if (preferMjpg) {
+      const hasMjpg = modes.some(m => m.pixFmt === 'MJPG');
+      if (!hasMjpg) warnings.push('preferMJPG is on but device has no MJPG modes');
+    }
+
+    // 3. If codec is h264, warn if no H264 modes exist
+    const codec = $('videoCodec').value || 'vp8';
+    if (codec === 'h264') {
+      const hasH264 = modes.some(m => m.pixFmt === 'H264');
+      if (!hasH264) warnings.push('H.264 codec selected but device has no H264 capture mode');
+    }
+
+    return warnings;
+  }
+
+  function slugifyCameraId(value) {
+    let s = String(value || '').trim().toLowerCase();
+    s = s.replace(/['"’]/g, '');
+    s = s.replace(/[^a-z0-9]+/g, '-');
+    s = s.replace(/^-+|-+$/g, '');
+    return s;
+  }
+
+  function generatedCameraId(c) {
+    const fromLabel = slugifyCameraId(c.label);
+    if (fromLabel) return fromLabel;
+    const fromDevice = slugifyCameraId(String(c.device || '').replace(/^.*\//, ''));
+    if (fromDevice) return 'cam-' + fromDevice;
+    return '';
+  }
+
+  function cameraIdCounts() {
+    const counts = {};
+    cameras.forEach(c => {
+      const id = generatedCameraId(c);
+      if (!id) return;
+      counts[id] = (counts[id] || 0) + 1;
+    });
+    return counts;
+  }
+
+  function cameraValidation(c, counts) {
+    const name = String(c.label || '').trim();
+    const id = generatedCameraId(c);
+    const device = String(c.device || '').trim();
+    const type = c.type || 'OVERVIEW';
+    const trainSlug = String(c.trainSlug || '').trim();
+    return {
+      id,
+      nameOk: !!name && !!id && counts[id] === 1,
+      nameMsg: !name ? 'Required — enter a camera name' : (!id ? 'Use letters or numbers in the name' : (counts[id] > 1 ? 'Camera name must be unique' : 'OK')),
+      deviceOk: !!device,
+      deviceMsg: device ? 'OK' : 'Required — choose or enter a device',
+      trainOk: type !== 'ONBOARD' || true,
+      trainMsg: type === 'ONBOARD'
+        ? (trainSlug ? 'Linked to train slug ' + trainSlug : 'Optional — select a train or type a slug later')
+        : 'Only used for ONBOARD cameras',
+    };
+  }
+
+  function validateCameras() {
+    const counts = cameraIdCounts();
+    const errors = [];
+    cameras.forEach((c, i) => {
+      const v = cameraValidation(c, counts);
+      const label = String(c.label || '').trim() || `Camera ${i + 1}`;
+      if (!v.nameOk) errors.push(`${label}: ${v.nameMsg}`);
+      if (!v.deviceOk) errors.push(`${label}: ${v.deviceMsg}`);
+    });
+    return errors;
+  }
+
+  function nextCameraName(base = 'Camera') {
+    const used = new Set(cameras.map(c => slugifyCameraId(c.label)).filter(Boolean));
+    let n = cameras.length + 1;
+    let name = `${base} ${n}`;
+    while (used.has(slugifyCameraId(name))) {
+      n += 1;
+      name = `${base} ${n}`;
+    }
+    return name;
+  }
+
+
+  function renderCameras() {
+    const tbody = $('cameraRows');
+    tbody.innerHTML = '';
+    $('noCameras').style.display = cameras.length === 0 ? 'block' : 'none';
+    const counts = cameraIdCounts();
+    const globalSettings = currentVideoSettings();
+
+    cameras.forEach((c, i) => {
+      if (!c.type) c.type = 'OVERVIEW';
+      const v = cameraValidation(c, counts);
+      const typeOpts = camTypes.map(t =>
+        `<option value="${t}" ${c.type === t ? 'selected' : ''}>${t}</option>`
+      ).join('');
+      const st = camStatuses[v.id];
+      let statusCell = '<span class="muted" style="font-size:12px">—</span>';
+      if (st) {
+        if (!st.ok) {
+          statusCell = `<span class="err" style="font-size:12px" title="${esc(st.error || '')}">✗ ${esc((st.error || 'error').split(':').pop().trim().slice(0,40))}</span>`;
+        } else {
+          const warnings = capsWarnings(st);
+          if (warnings.length > 0) {
+            const tip = warnings.join('\n');
+            const short = warnings[0].slice(0, 38) + (warnings[0].length > 38 ? '…' : '');
+            statusCell = `<span class="warn" style="font-size:12px" title="${esc(tip)}">⚠ ${esc(short)}</span>` +
+              (warnings.length > 1 ? `<br><span class="muted" style="font-size:11px">(+${warnings.length - 1} more)</span>` : '');
+          } else {
+            const modeSummary = st.caps && st.caps.modes
+              ? [...new Set(st.caps.modes.map(m => `${m.pixFmt} ${m.width}x${m.height}`))].slice(0,3).join(', ') + (st.caps.modes.length > 3 ? '…' : '')
+              : '';
+            statusCell = `<span class="ok" style="font-size:12px" title="${esc(modeSummary)}">✓ OK</span>` +
+              (modeSummary ? `<br><span class="muted" style="font-size:11px">${esc(modeSummary)}</span>` : '');
+          }
+        }
+      }
+
+      const trainField = c.type === 'ONBOARD'
+        ? `<input value="${esc(c.trainSlug)}" list="trainSlugOptions" placeholder="Select or type train slug" oninput="cameras[${i}].trainSlug=this.value" onchange="renderCameras()" />
+           <div class="field-note ${c.trainSlug ? 'ok' : 'warn'}">${esc(v.trainMsg)}</div>`
+        : `<input value="" placeholder="Only for ONBOARD" disabled />
+           <div class="field-note ok">${esc(v.trainMsg)}</div>`;
+
+      // ── Resolution dropdown ───────────────────────────────────────────────
+      // Build list of unique WxH options from caps if available, otherwise
+      // fall back to the standard fixed set. Sort by pixel count descending.
+      const modes = (st && st.ok && st.caps && st.caps.modes) ? st.caps.modes : [];
+      const fallbackResolutions = ['1920x1080','1280x720','960x540','854x480','640x360','320x180'];
+
+      let resolutionOptions;
+      if (modes.length > 0) {
+        // Unique resolutions from actual caps, highest first
+        const seen = new Set();
+        const sorted = [...modes].sort((a, b) => (b.width * b.height) - (a.width * a.height));
+        resolutionOptions = sorted
+          .filter(m => { const k = `${m.width}x${m.height}`; if (seen.has(k)) return false; seen.add(k); return true; })
+          .map(m => ({ label: `${m.width}x${m.height}`, value: `${m.width}x${m.height}` }));
+        // Always include a "Global default" option at the top
+        resolutionOptions.unshift({ label: `Global (${globalSettings.width}x${globalSettings.height})`, value: '0x0' });
+      } else {
+        resolutionOptions = [
+          { label: `Global (${globalSettings.width}x${globalSettings.height})`, value: '0x0' },
+          ...fallbackResolutions.map(r => ({ label: r, value: r })),
+        ];
+      }
+
+      // Current per-camera selection, or '0x0' (global) if not set
+      const camResVal = (c.width && c.height) ? `${c.width}x${c.height}` : '0x0';
+      // If the saved value isn't in the option list (e.g. caps changed), fall back to global
+      const resVal = resolutionOptions.some(o => o.value === camResVal) ? camResVal : '0x0';
+      const resOpts = resolutionOptions.map(o =>
+        `<option value="${o.value}" ${o.value === resVal ? 'selected' : ''}>${esc(o.label)}</option>`
+      ).join('');
+
+      // ── FPS dropdown ──────────────────────────────────────────────────────
+      // Build fps options from the selected resolution's caps modes if available.
+      // Always include a "Global default" option.
+      let fpsSet = new Set();
+      if (modes.length > 0 && resVal !== '0x0') {
+        const [selW, selH] = resVal.split('x').map(Number);
+        modes.filter(m => m.width === selW && m.height === selH)
+             .forEach(m => (m.fps || []).forEach(f => fpsSet.add(f)));
+      }
+      // Ensure the standard fps values are always present as fallback
+      [10, 15, 20, 25, 30].forEach(f => fpsSet.add(f));
+      const sortedFps = [...fpsSet].sort((a, b) => a - b);
+
+      const camFpsVal = c.fps || 0;
+      // Determine best display: 0 → global
+      const fpsDisplayVal = camFpsVal === 0 ? 0 : camFpsVal;
+      const fpsOpts = [
+        `<option value="0" ${fpsDisplayVal === 0 ? 'selected' : ''}>Global (${globalSettings.fps}fps)</option>`,
+        ...sortedFps.map(f => `<option value="${f}" ${fpsDisplayVal === f ? 'selected' : ''}>${f} fps</option>`)
+      ].join('');
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>
+          <input value="${esc(c.label)}" placeholder="Main camera" oninput="cameras[${i}].label=this.value" onchange="renderCameras()" />
+          <div class="field-note ${v.nameOk ? 'ok' : 'warn'}">${esc(v.nameMsg)}</div>
+          ${v.id ? `<span class="inline-help">Internal ID: <span class="kbd">${esc(v.id)}</span></span>` : ''}
+        </td>
+        <td><select onchange="cameras[${i}].type=this.value; if (this.value !== 'ONBOARD') cameras[${i}].trainSlug=''; renderCameras()">${typeOpts}</select></td>
+        <td>
+          <input value="${esc(c.device)}" placeholder="/dev/video0" oninput="cameras[${i}].device=this.value" onchange="renderCameras()" />
+          <div class="field-note ${v.deviceOk ? 'ok' : 'warn'}">${esc(v.deviceMsg)}</div>
+        </td>
+        <td>
+          <select onchange="(function(v){ const p=v.split('x'); cameras[${i}].width=Number(p[0])||0; cameras[${i}].height=Number(p[1])||0; renderCameras(); })(this.value)">${resOpts}</select>
+          ${modes.length === 0 ? '<div class="field-note warn" style="font-size:11px">Check cameras to see supported modes</div>' : ''}
+        </td>
+        <td>
+          <select onchange="cameras[${i}].fps=Number(this.value); renderCameras()">${fpsOpts}</select>
+        </td>
+        <td>${trainField}</td>
+        <td style="white-space:nowrap;min-width:120px">${statusCell}</td>
+        <td><button class="small danger" onclick="removeCamera(${i})">Remove</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function removeCamera(i) {
+    cameras.splice(i, 1);
+    markFormDirty();
+    renderCameras();
+  }
+
+  $('btnAddCamera').addEventListener('click', () => {
+    cameras.push({ cameraId: '', label: nextCameraName('Camera'), type: 'OVERVIEW', device: '', trainSlug: '', width: 0, height: 0, fps: 0 });
+    markFormDirty();
+    renderCameras();
+  });
+
+  // ---- Check configured cameras ----
+  $('btnCheckCameras').addEventListener('click', async () => {
+    const btn = $('btnCheckCameras');
+    btn.disabled = true;
+    btn.textContent = '…checking';
+    try {
+      const res = await fetch('/api/cameras/check');
+      if (!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+      camStatuses = {};
+      (data.cameras || []).forEach(c => { camStatuses[c.cameraId] = c; });
+      renderCameras();
+    } catch (e) {
+      setStatus('Camera check failed: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⟳ Check cameras';
+    }
+  });
+
+  // ---- Scan for all available video devices ----
+  $('btnScanCameras').addEventListener('click', async () => {
+    const btn = $('btnScanCameras');
+    btn.disabled = true;
+    btn.textContent = '…scanning';
+    const panel = $('camScanPanel');
+    const content = $('camScanContent');
+    content.innerHTML = '<span class="muted">Scanning…</span>';
+    panel.style.display = 'block';
+    try {
+      const res = await fetch('/api/cameras/scan');
+      if (!res.ok) throw new Error('http ' + res.status);
+      const data = await res.json();
+      const devices = data.devices || [];
+      if (devices.length === 0) {
+        content.innerHTML = '<p class="muted">No capture-capable video devices found.</p>';
+      } else {
+        const configuredDevs = new Set(cameras.map(c => c.device));
+        let html = '';
+        devices.forEach(d => {
+          const isConfigured = configuredDevs.has(d.device);
+          const modes = (d.caps && d.caps.modes) || [];
+          // Group modes by pixFmt
+          const byFmt = {};
+          modes.forEach(m => {
+            if (!byFmt[m.pixFmt]) byFmt[m.pixFmt] = [];
+            byFmt[m.pixFmt].push(`${m.width}x${m.height}@${(m.fps||[]).join('/')}fps`);
+          });
+          const fmtLines = Object.entries(byFmt)
+            .map(([fmt, sizes]) => `<span style="color:#9fb4ff">${fmt}</span>: ${sizes.join(', ')}`)
+            .join('<br>');
+          html += `<div style="margin-bottom:12px;padding:10px;background:#111b2f;border-radius:8px;border:1px solid #1f2b45">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+              <strong style="font-family:monospace;font-size:13px">${esc(d.device)}</strong>
+              ${isConfigured
+                ? '<span style="color:#7cf58a;font-size:12px">● already configured</span>'
+                : `<button class="small" onclick="addCameraFromScan('${esc(d.device)}')">+ Add to config</button>`}
+            </div>
+            <div style="font-size:12px;color:#b6c6ff;line-height:1.8">${fmtLines || '<span class="muted">no modes</span>'}</div>
+          </div>`;
+        });
+        content.innerHTML = html;
+      }
+    } catch (e) {
+      content.innerHTML = `<span class="err">Scan failed: ${esc(e.message)}</span>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔍 Scan for cameras';
+    }
+  });
+
+  function addCameraFromScan(device) {
+    const base = String(device || '').replace(/.*\//, '') || 'camera';
+    const pretty = base.replace(/-/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+    cameras.push({ cameraId: '', label: nextCameraName(pretty), type: 'OVERVIEW', device: device, trainSlug: '', width: 0, height: 0, fps: 0 });
+    markFormDirty();
+    renderCameras();
+    $('camScanPanel').style.display = 'none';
+    $('camerasTable').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  // ---- Load config from agent ----
+  async function loadConfig(options = {}) {
+    const silent = options.silent === true;
+    if (!silent) setStatus('Loading…');
+    loadingConfig = true;
+
+    try {
+      const res = await fetch('/api/config', { cache: 'no-store' });
+      if (!res.ok) throw new Error('http ' + res.status);
+
+      const cfg = await res.json();
+      const revision = res.headers.get('X-Config-Revision') || cfg._revision || '';
+      delete cfg._revision;
+
+      lastLoadedConfig = cloneConfig(cfg);
+      configRevision = revision;
+
+      $('layoutId').value     = cfg.layoutId    ?? '1';
+      $('allowControl').value = String(!!cfg.allowControl);
+      $('backendUrl').value   = cfg.backendUrl   ?? 'http://localhost:8080';
+      $('backendWsUrl').value = cfg.backendWsUrl ?? defaultWsFromBackend(cfg.backendUrl ?? '');
+      $('username').value     = cfg.username     ?? '';
+      $('password').value     = cfg.password     ?? '';
+      $('dccExPort').value     = cfg.dccEx?.port ?? '/dev/ttyUSB0';
+      $('mqttBrokerUrl').value = cfg.mqtt?.brokerUrl ?? 'tcp://localhost:1883';
+      $('janusUrl').value     = cfg.janusUrl     ?? defaultJanusFromBackend(cfg.backendUrl ?? '');
+      $('forceRelay').value   = cfg.forceRelay === true ? 'true' : cfg.forceRelay === false ? 'false' : '';
+      $('videoCodec').value   = cfg.videoCodec   ?? 'h264';
+      $('h264Encoder').value  = cfg.h264Encoder  ?? 'auto';
+
+      const allowedProfiles = ['constrained-baseline','baseline','main','high'];
+      $('h264Profile').value = allowedProfiles.includes(cfg.h264Profile) ? cfg.h264Profile : 'constrained-baseline';
+
+      setSelectNearest($('h264BitrateBps'),        cfg.h264BitrateBps        ?? 3000000);
+      setSelectNearest($('webrtcMaxBitrateBps'),   cfg.webrtcMaxBitrateBps   ?? 3000000);
+      setSelectNearest($('webrtcStartBitrateBps'), cfg.webrtcStartBitrateBps ?? 1500000);
+      setSelectNearest($('webrtcMinBitrateBps'),   cfg.webrtcMinBitrateBps   ?? 300000);
+
+      const allowedRes = ['320x180','640x360','854x480','960x540','1280x720','1920x1080'];
+      const resKey = `${cfg.videoWidth ?? 1280}x${cfg.videoHeight ?? 720}`;
+      $('videoResolution').value = allowedRes.includes(resKey) ? resKey : '1280x720';
+
+      const allowedFps = [10, 15, 20, 25, 30];
+      const fps = Number(cfg.videoFps ?? 25);
+      $('videoFps').value = String(allowedFps.includes(fps) ? fps : 25);
+
+      $('preferMjpg').checked = cfg.preferMjpg !== false;
+
+      const fs = cfg.failsafe || {};
+      $('fsControlTimeoutMs').value = fs.controlTimeoutMs ?? 450;
+      $('fsReissueStopMs').value    = fs.reissueStopMs    ?? 500;
+
+      const jmri = cfg.jmri || {};
+      $('jmriEnabled').value = jmri.enabled ? 'true' : 'false';
+      $('jmriUrl').value     = jmri.url ?? 'http://localhost:12080';
+      updateJmriSection();
+
+      trains  = (cfg.trains  || []).map(t => ({ trainId: t.trainId ?? 0, trainSlug: t.trainSlug ?? '', dccAddress: t.dccAddress ?? t.jmriAddress ?? 0, displayName: t.displayName ?? '', guardingSignal: t.guardingSignal ?? '', startBlock: t.startBlock ?? '' }));
+      cameras = (cfg.cameras || []).map((c, i) => {
+        const label = c.label || c.cameraId || `Camera ${i + 1}`;
+        return { cameraId: c.cameraId ?? '', label, type: c.type ?? 'OVERVIEW', device: c.device ?? '', trainSlug: c.trainSlug ?? '', width: c.width ?? 0, height: c.height ?? 0, fps: c.fps ?? 0 };
+      });
+      renderTrains();
+      renderCameras();
+      updateLegalLink();
+      updateVideoHints();
+      formDirty = false;
+      if (!silent) setStatus('Loaded');
+    } catch (e) {
+      if (!silent) setStatus('Failed to load config: ' + e.message, 'err');
+    } finally {
+      loadingConfig = false;
+    }
+  }
+
+  // Poll config freshness. If the file changes while this tab has no unsaved
+  // edits, reload the form. If the user has unsaved edits, warn and let the
+  // server-side revision check reject a stale save with HTTP 409.
+  async function pollConfigRevision() {
+    // Skip entirely while a save is in flight or within 5 s of one completing,
+    // to avoid a race where we re-read a stale config.json and clobber the form.
+    if (savingConfig || (Date.now() - lastSaveCompletedAt < 5000)) {
+      setTimeout(pollConfigRevision, 8000);
+      return;
+    }
+    try {
+      const res = await fetch('/api/config', { cache: 'no-store' });
+      if (!res.ok) throw new Error('http ' + res.status);
+      const cfg = await res.json();
+      const latestRevision = res.headers.get('X-Config-Revision') || cfg._revision || '';
+
+      if (configRevision && latestRevision && latestRevision !== configRevision) {
+        if (formDirty) {
+          setStatus('Config changed on disk since this page loaded. Reload before saving, otherwise stale save will be rejected.', 'warn');
+        } else {
+          await loadConfig({ silent: true });
+          setStatus('Config refreshed from disk', 'ok');
+        }
+      }
+    } catch {
+      // Status polling already shows live agent health; keep config freshness
+      // failures quiet to avoid noisy UI messages during restart/offline periods.
+    } finally {
+      setTimeout(pollConfigRevision, 8000);
+    }
+  }
+
+  // ---- Build payload from form ----
+  function buildPayload() {
+    const backendUrl = $('backendUrl').value.trim() || 'http://localhost:8080';
+    const [vw, vh]   = ($('videoResolution').value || '1280x720').split('x').map(Number);
+
+    const payload = cloneConfig(lastLoadedConfig);
+
+    payload.layoutId     = $('layoutId').value.trim() || '1';
+    payload.allowControl = $('allowControl').value === 'true';
+    payload.backendUrl   = backendUrl;
+    payload.backendWsUrl = $('backendWsUrl').value.trim() || defaultWsFromBackend(backendUrl);
+    payload.username     = $('username').value.trim();
+    payload.password     = $('password').value;
+
+    payload.dccEx = {
+      ...(payload.dccEx || {}),
+      port: $('dccExPort').value.trim() || '/dev/ttyUSB0',
+      baudRate: Number(payload.dccEx?.baudRate) || 115200,
+      commandTimeoutMs: Number(payload.dccEx?.commandTimeoutMs) || 3000,
+    };
+
+    payload.mqtt = {
+      ...(payload.mqtt || {}),
+      brokerUrl: $('mqttBrokerUrl').value.trim() || 'tcp://localhost:1883',
+      topicPrefix: payload.mqtt?.topicPrefix || 'layout',
+    };
+
+    payload.janusUrl     = $('janusUrl').value.trim()  || defaultJanusFromBackend(backendUrl);
+    payload.forceRelay   = $('forceRelay').value === '' ? null : ($('forceRelay').value === 'true');
+    payload.videoCodec   = $('videoCodec').value;
+    payload.h264Encoder  = $('h264Encoder').value;
+    payload.h264Profile  = $('h264Profile').value;
+    payload.videoWidth   = vw || 1280;
+    payload.videoHeight  = vh || 720;
+    payload.videoFps     = Number($('videoFps').value) || 25;
+    payload.preferMjpg   = $('preferMjpg').checked;
+
+    payload.h264BitrateBps        = Number($('h264BitrateBps').value)        || 3000000;
+    payload.webrtcMaxBitrateBps   = Number($('webrtcMaxBitrateBps').value)   || 3000000;
+    payload.webrtcStartBitrateBps = Number($('webrtcStartBitrateBps').value) || 1500000;
+    payload.webrtcMinBitrateBps   = Number($('webrtcMinBitrateBps').value)   || 300000;
+
+    payload.failsafe = {
+      ...(payload.failsafe || {}),
+      controlTimeoutMs: Number($('fsControlTimeoutMs').value) || 450,
+      reissueStopMs:    Number($('fsReissueStopMs').value)    || 500,
+    };
+
+    payload.jmri = {
+      ...(payload.jmri || {}),
+      enabled: $('jmriEnabled').value === 'true',
+      url:     $('jmriUrl').value.trim() || 'http://localhost:12080',
+    };
+
+    payload.trains = payload.trains || [];
+    payload.cameras = cameras.map(c => ({
+      cameraId:  generatedCameraId(c),
+      label:     String(c.label || '').trim(),
+      type:      c.type,
+      device:    String(c.device || '').trim(),
+      trainSlug: c.type === 'ONBOARD' ? String(c.trainSlug || '').trim() : '',
+      width:     c.width  || 0,
+      height:    c.height || 0,
+      fps:       c.fps    || 0,
+    }));
+
+    return payload;
+  }
+
+  // ---- Save ----
+  async function doSave(restart) {
+    const btn = restart ? $('btnSaveRestart') : $('btnSave');
+    btn.disabled = true;
+    savingConfig = true;
+
+    const cameraErrors = validateCameras();
+    if (cameraErrors.length > 0) {
+      setStatus('Fix camera settings before saving: ' + cameraErrors.join(' • '), 'err');
+      btn.disabled = false;
+      savingConfig = false;
+      renderCameras();
+      return;
+    }
+
+    setStatus('Saving…');
+    const payload = buildPayload();
+    const qs = restart ? '?restart=1' : '';
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (configRevision) headers['X-Config-Revision'] = configRevision;
+
+      const res = await fetch('/api/config' + qs, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        if (res.status === 409) {
+          const latestRevision = res.headers.get('X-Config-Revision') || '';
+          if (latestRevision) configRevision = latestRevision;
+          setStatus('Save blocked: config changed on disk. Reload the page/config before saving again.', 'warn');
+        } else {
+          setStatus('Save failed: ' + txt, 'err');
+        }
+        btn.disabled = false;
+        savingConfig = false;
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      configRevision = res.headers.get('X-Config-Revision') || data.revision || configRevision;
+      lastLoadedConfig = cloneConfig(payload);
+      lastSaveCompletedAt = Date.now();
+      formDirty = false;
+
+      if (restart) {
+        setStatus('Saved ✓ Restarting…', 'ok');
+        setTimeout(() => location.reload(), 1800);
+      } else {
+        setStatus('Saved ✓', 'ok');
+        btn.disabled = false;
+        savingConfig = false;
+        // Do NOT call loadConfig here — lastLoadedConfig was already updated to
+        // the saved payload above. Re-reading from disk risks a race where the
+        // agent hasn't yet flushed the new file and we overwrite form fields with
+        // the old values, causing a subsequent save to revert them.
+      }
+    } catch (e) {
+      setStatus('Network error: ' + e.message, 'err');
+      btn.disabled = false;
+      savingConfig = false;
+    }
+  }
+
+  $('btnSaveRestart').addEventListener('click', () => doSave(true));
+  $('btnSave').addEventListener('click',        () => doSave(false));
+
+  // ---- JMRI section ----
+  function updateJmriSection() {
+    const enabled = $('jmriEnabled').value === 'true';
+    $('jmriPanelSection').style.display = enabled ? '' : 'none';
+  }
+  $('jmriEnabled').addEventListener('change', updateJmriSection);
+
+  $('btnFetchPanels').addEventListener('click', async () => {
+    const statusEl = $('jmriPanelStatus');
+    const listEl   = $('jmriPanelList');
+    statusEl.textContent = 'Fetching…';
+    listEl.innerHTML = '';
+    try {
+      const res = await fetch('/api/jmri/panels');
+      const data = await res.json();
+      if (data.error && (!data.panels || data.panels.length === 0)) {
+        statusEl.textContent = '✗ ' + data.error;
+        return;
+      }
+      const panels = data.panels || [];
+      if (panels.length === 0) {
+        statusEl.textContent = 'No open panels found — open a panel in JMRI PanelPro first.';
+        return;
+      }
+      statusEl.textContent = panels.length + ' panel(s) found';
+      const ul = document.createElement('ul');
+      ul.style.cssText = 'list-style:none;padding:0;margin:0';
+      panels.forEach(p => {
+        const li = document.createElement('li');
+        li.style.cssText = 'margin-bottom:0.3rem;font-size:0.85rem';
+        const a = document.createElement('a');
+        const agentOrigin = window.location.origin;
+        a.href = agentOrigin + p.url;
+        a.target = '_blank';
+        a.textContent = p.url;
+        a.style.fontFamily = 'monospace';
+        li.innerHTML = `<span class="pill">${p.type}</span> <strong>${p.name}</strong> — `;
+        li.appendChild(a);
+        ul.appendChild(li);
+      });
+      listEl.appendChild(ul);
+    } catch (e) {
+      statusEl.textContent = '✗ ' + e.message;
+    }
+  });
+
+  // ---- Status polling ----
+  async function pollStatus() {
+    try {
+      const res = await fetch('/api/status');
+      if (!res.ok) throw new Error('http ' + res.status);
+      const s = await res.json();
+
+      const stompOk = s.stompConnected === true;
+      $('stStomp').textContent = stompOk ? 'connected' : (s.stompConnected === false ? 'disconnected' : '—');
+      $('stStomp').className   = stompOk ? 'ok' : 'err';
+
+      // Command station pill — label and value driven by commandStationType
+      const csType = s.commandStationType || 'DCC-EX';
+      $('stCsLabel').textContent = csType;
+      const csOk = s.commandStationConnected === true;
+      $('stCs').textContent = csOk ? 'connected' : (s.commandStationConnected === false ? 'disconnected' : '—');
+      $('stCs').className   = csOk ? 'ok' : 'err';
+
+      if (s.lastHeartbeatMs != null) {
+        const age = ((Date.now() - s.lastHeartbeatMs) / 1000).toFixed(1);
+        $('stHB').textContent = `${age}s ago`;
+        $('stHB').className   = age < 10 ? 'ok' : 'warn';
+      } else {
+        $('stHB').textContent = 'no heartbeat';
+        $('stHB').className   = 'warn';
+      }
+
+      $('stLayout').textContent = s.layoutId ?? '—';
+      $('stLayout').className   = 'muted';
+
+      // Phase — only visible during startup; hidden once agent is ready
+      if (s.phase) {
+        $('stPhaseItem').style.display = '';
+        $('stPhase').textContent = s.phase;
+        $('stPhase').className   = (s.ready === true) ? 'ok' : (s.phase === 'running' ? 'ok' : 'warn');
+      } else {
+        $('stPhaseItem').style.display = 'none';
+      }
+
+      // Degraded banner
+      const degraded = s.degraded === true;
+      const banner   = $('degradedBanner');
+      if (degraded && Array.isArray(s.reasons) && s.reasons.length > 0) {
+        $('degradedMsg').textContent = s.reasons.join(' • ');
+        banner.style.display = 'block';
+      } else if (degraded) {
+        $('degradedMsg').textContent = 'Agent is in a degraded state — check logs for details.';
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+
+      renderStreamStatus(s);
+
+    } catch {
+      $('stStomp').textContent = '—'; $('stStomp').className = 'muted';
+      $('stCs').textContent    = '—'; $('stCs').className    = 'muted';
+    } finally {
+      setTimeout(pollStatus, 3000);
+    }
+  }
+
+  // ---- renderStreamStatus ----
+  // Populates the Live Stream Status box from the `stream` key in /api/status.
+  // All fields are optional — shows '—' for anything absent.
+  function renderStreamStatus(s) {
+    const st = s && s.stream ? s.stream : {};
+    const running = st.running === true;
+
+    function fmtBps(v) {
+      if (!v) return '—';
+      if (v >= 1000000) return (v / 1000000).toFixed(2) + ' Mbps';
+      return (v / 1000).toFixed(0) + ' kbps';
+    }
+
+    $('ssState').textContent = running ? '● streaming' : (st.running === false ? '○ idle' : '—');
+    $('ssState').className   = 'ss-val ' + (running ? 'ok' : 'muted');
+
+    $('ssCodec').textContent      = st.codec      || '—';
+    $('ssEncoder').textContent    = st.encoder    || '—';
+    $('ssProfile').textContent    = st.profile    || '—';
+    $('ssResolution').textContent = (st.width && st.height) ? `${st.width}×${st.height}` : '—';
+    $('ssFps').textContent        = st.fps        ? `${st.fps} fps` : '—';
+    $('ssPixFmt').textContent     = st.pixFmt     || '—';
+    $('ssBitrate').textContent    = fmtBps(st.bitrateBps);
+    $('ssWebrtcMax').textContent  = fmtBps(st.webrtcMaxBps);
+    $('ssRoom').textContent       = st.roomId     ? String(st.roomId) : '—';
+
+    const iceEl = $('ssIce');
+    iceEl.textContent = st.iceState || '—';
+    iceEl.className   = 'ss-val ' + (
+      st.iceState === 'connected' || st.iceState === 'completed' ? 'ok' :
+      st.iceState === 'failed' ? 'err' : 'muted'
+    );
+
+    const camDiv = $('ssCameras');
+    if (st.cameras && st.cameras.length > 0) {
+      let html = '<div style="margin-top:4px;font-size:11px;color:#6a80ac;">Per-camera streams:</div>';
+      st.cameras.forEach(c => {
+        const cs = c.iceState === 'connected' || c.iceState === 'completed' ? 'ok' :
+                   c.iceState === 'failed' ? 'err' : 'muted';
+        html += `<div class="ss-row" style="padding-left:12px;">` +
+          `<span class="ss-label" style="min-width:100px">${esc(c.cameraId || '?')}</span>` +
+          `<span class="ss-val">${esc(c.codec||'—')}/${esc(c.encoder||'—')} ${c.width||0}×${c.height||0}@${c.fps||0}fps</span>` +
+          `<span class="ss-val ${cs}" style="margin-left:8px">ICE: ${esc(c.iceState||'—')}</span>` +
+          `</div>`;
+      });
+      camDiv.innerHTML = html;
+    } else {
+      camDiv.innerHTML = '';
+    }
+
+    $('ssPipeline').textContent = st.pipeline ? st.pipeline.slice(0, 400) + (st.pipeline.length > 400 ? ' …' : '') : '';
+  }
+
+  // ---- Helpers ----
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  }
+
+  // Re-validate camera warnings whenever a global video setting changes.
+  // Only re-renders if there are existing check results to avoid flicker.
+  function onVideoSettingChange() {
+    if (Object.keys(camStatuses).length > 0) renderCameras();
+  }
+  ['videoResolution','videoFps','videoCodec'].forEach(id => {
+    $( id).addEventListener('change', onVideoSettingChange);
+  });
+  $('preferMjpg').addEventListener('change', onVideoSettingChange);
+
+  loadConfig();
+  pollStatus();
+  pollConfigRevision();
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+{
+  "_comment": "Copy this to deploy/config/config.json and fill in your values. Remove all _comment fields.",
+
+  "layoutId":     "1",
+  "backendUrl":   "https://mavsphere.com",
+  "backendWsUrl": "wss://mavsphere.com/api/ws/agent",
+  "username":     "your@email.com",
+  "password":     "yourpassword",
+
+  "dccEx": {
+    "_comment": "Serial path (/dev/ttyUSB0, /dev/ttyACM0) or TCP address (192.168.1.100:2560)",
+    "port":             "/dev/ttyUSB0",
+    "baudRate":         115200,
+    "commandTimeoutMs": 3000
+  },
+
+  "mqtt": {
+    "_comment": "Use tcp://mosquitto:1883 when running via Docker Compose (deploy/). Use tcp://mosquitto:1883 when running the agent standalone with --network host.",
+    "brokerUrl":   "tcp://mosquitto:1883",
+    "topicPrefix": "layout"
+  },
+
+  "janusUrl":          "wss://mavsphere.com/janus",
+  "videoCodec":        "vp8",
+  "h264Encoder":       "auto",
+  "h264Profile":       "baseline",
+  "h264BitrateBps":    1500000,
+  "preferMjpg":        true,
+  "videoWidth":        1280,
+  "videoHeight":       720,
+  "videoFps":          25,
+  "webrtcStartBitrateBps": 800000,
+  "webrtcMaxBitrateBps":   1500000,
+  "webrtcMinBitrateBps":   150000,
+
+  "cameras": [],
+
+  "allowControl": true,
+
+  "failsafe": {
+    "controlTimeoutMs": 450,
+    "reissueStopMs":    500
+  }
+}

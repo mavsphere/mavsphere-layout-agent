@@ -1,0 +1,131 @@
+{
+  "_comment": "Copy this to config.json and fill in your values. Remove all _comment fields.",
+
+  "layoutId":     "1",
+  "backendUrl":   "https://mavsphere.com",
+  "backendWsUrl": "wss://mavsphere.com/api/ws/agent",
+  "username":     "your@email.com",
+  "password":     "yourpassword",
+
+  "dccEx": {
+    "_comment": "Serial path (/dev/ttyUSB0, /dev/ttyACM0) or TCP address (192.168.1.100:2560)",
+    "port":             "/dev/ttyUSB0",
+    "baudRate":         115200,
+    "commandTimeoutMs": 3000
+  },
+
+  "mqtt": {
+    "_comment": "Use tcp://mosquitto:1883 when running via Docker Compose. Use tcp://localhost:1883 when running standalone.",
+    "brokerUrl":   "tcp://mosquitto:1883",
+    "topicPrefix": "layout"
+  },
+
+  "janusUrl": "wss://mavsphere.com/janus",
+
+  "_comment_video": [
+    "VIDEO CODEC",
+    "  videoCodec: 'h264' is strongly recommended over 'vp8'.",
+    "    h264  — Use this. Better quality at same bitrate, hardware decode on all browsers/devices.",
+    "    vp8   — Software only, higher CPU, lower quality. Only fall back here if h264 fails.",
+    "    auto  — Tries h264 first, falls back to vp8. Good option if unsure.",
+    "",
+    "H.264 ENCODER (only used when videoCodec is 'h264' or 'auto')",
+    "  h264Encoder:",
+    "    auto        — Recommended. Agent probes at runtime: uses v4l2h264enc (Pi HW) if",
+    "                  available, otherwise falls back to x264enc (software). Best default.",
+    "    v4l2h264enc — Force Pi hardware encoder. Use only on Raspberry Pi.",
+    "                  Disables GCC congestion control (HW encoder can't be mid-stream adjusted).",
+    "    x264enc     — Force software encoder. Correct choice for Ubuntu/PC desktop.",
+    "                  GCC congestion control remains active — bitrate adapts to network.",
+    "",
+    "H.264 PROFILE",
+    "  h264Profile: determines which decoder features are required on the viewer's device.",
+    "    constrained-baseline — BEST CHOICE for max compatibility (all browsers, mobile, set-top).",
+    "                           Same as what Teams, Zoom, and Meet default to.",
+    "    baseline             — Broadly compatible, slightly looser than constrained-baseline.",
+    "    main                 — Better compression but some older mobile decoders may struggle.",
+    "    high                 — Best compression, modern browsers/desktop only.",
+    "",
+    "BITRATE SETTINGS",
+    "  h264BitrateBps: the target encode bitrate passed to the GStreamer encoder element.",
+    "    Pi (v4l2h264enc)     : 1500000–2000000 (1.5–2 Mbps). HW encoder ceiling is ~4 Mbps.",
+    "    PC x264enc           : 2000000–4000000 (2–4 Mbps). No real ceiling on modern hardware.",
+    "    Note: for x264enc this value is divided by 1000 and passed as kbps to GStreamer.",
+    "",
+    "  webrtcMaxBitrateBps: ceiling for the janusvrwebrtcsink GCC congestion controller.",
+    "    Should be >= h264BitrateBps. GCC won't go above this even on perfect links.",
+    "    Set equal to h264BitrateBps unless you want GCC to probe beyond the encoder target.",
+    "",
+    "  webrtcStartBitrateBps: initial bitrate GCC probes from on connection.",
+    "    ~50% of max is a good starting point. Too low = slow ramp-up on good links.",
+    "    Too high = burst of packet loss on first connect.",
+    "",
+    "  webrtcMinBitrateBps: floor GCC won't drop below. 150000–300000 is sensible.",
+    "    Prevents the stream from becoming unwatchable on very poor links; if bandwidth",
+    "    genuinely can't support this floor the stream will stall/recover rather than degrade.",
+    "",
+    "RECOMMENDED PRESETS",
+    "  Pi (Raspberry Pi 4/5, v4l2h264enc):",
+    "    videoCodec: 'h264', h264Encoder: 'v4l2h264enc', h264Profile: 'constrained-baseline'",
+    "    h264BitrateBps: 1500000, webrtcMaxBitrateBps: 1500000,",
+    "    webrtcStartBitrateBps: 750000, webrtcMinBitrateBps: 150000",
+    "",
+    "  PC / Ubuntu desktop (x264enc, software):",
+    "    videoCodec: 'h264', h264Encoder: 'auto', h264Profile: 'constrained-baseline'",
+    "    h264BitrateBps: 3000000, webrtcMaxBitrateBps: 3000000,",
+    "    webrtcStartBitrateBps: 1500000, webrtcMinBitrateBps: 300000",
+    "",
+    "  PC with NVIDIA GPU (nvh264enc — requires gst-plugins-bad with NVENC):",
+    "    videoCodec: 'h264', h264Encoder: 'auto', h264Profile: 'constrained-baseline'",
+    "    h264BitrateBps: 4000000, webrtcMaxBitrateBps: 4000000,",
+    "    webrtcStartBitrateBps: 2000000, webrtcMinBitrateBps: 300000",
+    "    (nvh264enc is not yet a selectable option in the agent — use x264enc for now)"
+  ],
+
+  "videoCodec":   "h264",
+  "h264Encoder":  "auto",
+  "h264Profile":  "constrained-baseline",
+
+  "h264BitrateBps":        3000000,
+  "webrtcStartBitrateBps": 1500000,
+  "webrtcMaxBitrateBps":   3000000,
+  "webrtcMinBitrateBps":   300000,
+
+  "_comment_res": [
+    "RESOLUTION / FPS / CAPTURE FORMAT",
+    "  videoWidth / videoHeight: requested capture resolution. Agent snaps to nearest",
+    "    mode the camera actually supports. Check agent logs for '[video] selected camera mode'",
+    "    to see what was actually negotiated.",
+    "  videoFps: requested frame rate. 25–30 is normal. Pi HW encoder caps at 30.",
+    "  preferMjpg: true = prefer MJPG camera capture mode (higher FPS on most USB cams).",
+    "    Set false only if you see 'device busy' errors on startup."
+  ],
+  "videoWidth":   1280,
+  "videoHeight":  720,
+  "videoFps":     30,
+  "preferMjpg":   true,
+
+  "cameras": [
+    {
+      "cameraId": "main",
+      "label": "main",
+      "type": "OVERVIEW",
+      "device": "/dev/video0",
+      "trainSlug": ""
+    },
+    {
+      "cameraId": "siding",
+      "label": "siding",
+      "type": "STATION",
+      "device": "/dev/video2",
+      "trainSlug": ""
+    }
+  ],
+
+  "allowControl": true,
+
+  "failsafe": {
+    "controlTimeoutMs": 450,
+    "reissueStopMs":    500
+  }
+}

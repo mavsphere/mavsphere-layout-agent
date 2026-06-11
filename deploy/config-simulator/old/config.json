@@ -1,0 +1,15 @@
+{
+  "layoutId": "2",
+  "agentUrl": "http://192.168.68.65:8091",
+  "mqtt": {
+    "brokerUrl": "tcp://mosquitto:1883",
+    "topicPrefix": "layout"
+  },
+  "dccEx": {
+    "listenAddr": "0.0.0.0:2560"
+  },
+  "simNodeId": "sim-node-01",
+  "physicsTickMs": 100,
+  "routePollMs": 500,
+  "defaultBlockLengthMm": 500
+}

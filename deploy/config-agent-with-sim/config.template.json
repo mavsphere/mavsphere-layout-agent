@@ -1,0 +1,50 @@
+{
+  "layoutId": "REPLACE_ME",
+  "backendUrl": "https://mavsphere.com",
+  "backendWsUrl": "wss://mavsphere.com/api/ws/agent",
+  "username": "YOUR_EMAIL",
+  "password": "YOUR_PASSWORD",
+  "dccEx": {
+    "port": "/dev/ttyUSB0",
+    "baudRate": 115200,
+    "commandTimeoutMs": 3000
+  },
+  "mqtt": {
+    "brokerUrl": "tcp://localhost:1883",
+    "topicPrefix": "layout"
+  },
+  "janusUrl": "ws://192.168.68.65:8188/janus",
+  "videoCodec": "vp8",
+  "h264Encoder": "auto",
+  "h264Profile": "baseline",
+  "h264BitrateBps": 1500000,
+  "preferMjpg": true,
+  "videoWidth": 1280,
+  "videoHeight": 720,
+  "videoFps": 30,
+  "webrtcStartBitrateBps": 800000,
+  "webrtcMaxBitrateBps": 1500000,
+  "webrtcMinBitrateBps": 150000,
+  "cameras": [
+    {
+      "cameraId": "main",
+      "label": "main",
+      "type": "OVERVIEW",
+      "device": "/dev/video0",
+      "trainSlug": ""
+    },
+    {
+      "cameraId": "siding",
+      "label": "siding",
+      "type": "STATION",
+      "device": "/dev/video2",
+      "trainSlug": ""
+    }
+  ],
+  "trains": null,
+  "allowControl": true,
+  "failsafe": {
+    "controlTimeoutMs": 2000,
+    "reissueStopMs": 1000
+  }
+}

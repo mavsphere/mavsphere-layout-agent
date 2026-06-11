@@ -1,0 +1,200 @@
+# syntax=docker/dockerfile:1.6
+#
+# mavsphere/layout-agent-base
+#
+# Contains GStreamer (built from source) and the Rust WebRTC plugins.
+# Build this ONLY when GST_VERSION, GST_PLUGINS_RS_REF, or LIBNICE_VERSION change.
+#
+#   make docker-buildx-base          # build + push mavsphere/layout-agent-base:latest
+#   make docker-buildx-base TAG=1.26.9
+#
+# The main Dockerfile starts FROM this image, so day-to-day agent builds
+# skip the 30-minute GStreamer compile entirely.
+
+ARG GST_VERSION=1.26.9
+ARG MESON_VERSION=1.4.2
+ARG GST_PLUGINS_RS_REF=0.14.4
+ARG LIBNICE_VERSION=0.1.23
+
+# ============================================================
+# Stage 1: Build GStreamer from source into /opt/gst
+# ============================================================
+FROM ubuntu:24.04 AS media-builder
+ARG DEBIAN_FRONTEND=noninteractive
+ARG GST_VERSION
+ARG MESON_VERSION
+ARG LIBNICE_VERSION
+
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ca-certificates curl xz-utils \
+    build-essential pkg-config ninja-build \
+    python3 python3-pip python3-setuptools \
+    bison flex gettext git \
+    libglib2.0-dev liborc-0.4-dev \
+    libssl-dev libffi-dev libmount-dev libpcre2-dev zlib1g-dev \
+    libasound2-dev libjpeg-turbo8-dev \
+    libopus-dev libvpx-dev libx264-dev libx265-dev \
+    libvorbis-dev libtheora-dev libspeex-dev libmp3lame-dev \
+    libsrtp2-dev libdrm-dev libunwind-dev libv4l-dev \
+    libsoup-3.0-dev \
+    libnice-dev \
+  ; \
+  rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+  curl -fsSL -o /tmp/meson.tar.gz "https://github.com/mesonbuild/meson/releases/download/${MESON_VERSION}/meson-${MESON_VERSION}.tar.gz"; \
+  python3 -m pip install --break-system-packages /tmp/meson.tar.gz; \
+  meson --version
+
+WORKDIR /build
+
+RUN set -eux; \
+  export PREFIX=/opt/gst; \
+  export PATH="$PREFIX/bin:$PATH"; \
+  export LD_LIBRARY_PATH="$PREFIX/lib:${LD_LIBRARY_PATH:-}"; \
+  export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib/aarch64-linux-gnu/pkgconfig:$PREFIX/lib/x86_64-linux-gnu/pkgconfig:$PREFIX/share/pkgconfig:${PKG_CONFIG_PATH:-}"; \
+  \
+  for mod in gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly; do \
+    echo "===== BUILDING $mod ====="; \
+    curl -fsSL -o "${mod}.tar.xz" "https://gstreamer.freedesktop.org/src/${mod}/${mod}-${GST_VERSION}.tar.xz"; \
+    tar -xf "${mod}.tar.xz"; \
+    cd "${mod}-${GST_VERSION}"; \
+    \
+    if [ "$mod" = "gst-plugins-bad" ]; then \
+      meson setup build \
+        --prefix="$PREFIX" --libdir=lib \
+        -Ddefault_library=shared -Dtests=disabled -Dwebrtc=enabled; \
+    elif [ "$mod" = "gst-plugins-ugly" ]; then \
+      meson setup build \
+        --prefix="$PREFIX" --libdir=lib \
+        -Ddefault_library=shared -Dtests=disabled -Dgpl=enabled -Dx264=enabled; \
+    else \
+      meson setup build \
+        --prefix="$PREFIX" --libdir=lib \
+        -Ddefault_library=shared -Dtests=disabled; \
+    fi; \
+    \
+    ninja -C build; \
+    ninja -C build install; \
+    cd /build; \
+  done
+
+RUN set -eux; \
+  export PREFIX=/opt/gst; \
+  export PATH="$PREFIX/bin:$PATH"; \
+  export LD_LIBRARY_PATH="$PREFIX/lib:${LD_LIBRARY_PATH:-}"; \
+  export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib/aarch64-linux-gnu/pkgconfig:$PREFIX/lib/x86_64-linux-gnu/pkgconfig:$PREFIX/share/pkgconfig:${PKG_CONFIG_PATH:-}"; \
+  \
+  curl -fsSL -o "libnice.tar.gz" "https://nice.freedesktop.org/releases/libnice-${LIBNICE_VERSION}.tar.gz"; \
+  tar -xzf libnice.tar.gz; \
+  cd "libnice-${LIBNICE_VERSION}"; \
+  meson setup build --prefix="$PREFIX" --libdir=lib -Dtests=disabled -Dgstreamer=enabled; \
+  ninja -C build; \
+  ninja -C build install
+
+RUN set -eux; \
+  export PATH="/opt/gst/bin:$PATH"; \
+  export LD_LIBRARY_PATH="/opt/gst/lib:${LD_LIBRARY_PATH:-}"; \
+  export GST_PLUGIN_SYSTEM_PATH_1_0=/opt/gst/lib/gstreamer-1.0; \
+  rm -f /root/.cache/gstreamer-1.0/registry.*.bin || true; \
+  gst-inspect-1.0 webrtcbin >/dev/null; \
+  gst-inspect-1.0 nicesrc   >/dev/null; \
+  gst-inspect-1.0 nicesink  >/dev/null; \
+  gst-inspect-1.0 h264parse >/dev/null; \
+  gst-inspect-1.0 vp8enc    >/dev/null; \
+  gst-inspect-1.0 jpegdec   >/dev/null; \
+  gst-inspect-1.0 x264enc   >/dev/null; \
+  echo "GStreamer build verified"
+
+# ============================================================
+# Stage 2: Build Rust GStreamer plugins (janusvrwebrtcsink)
+# ============================================================
+FROM ubuntu:24.04 AS rsplugins-builder
+ARG DEBIAN_FRONTEND=noninteractive
+ARG GST_PLUGINS_RS_REF
+
+COPY --from=media-builder /opt/gst /opt/gst
+
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ca-certificates git curl \
+    build-essential pkg-config \
+    libssl-dev libglib2.0-dev liborc-0.4-dev libunwind-dev \
+  ; \
+  rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+  curl -fsSL https://sh.rustup.rs | sh -s -- -y; \
+  . "$HOME/.cargo/env"; \
+  cargo install --locked cargo-c
+
+WORKDIR /build
+ENV PKG_CONFIG_PATH=/opt/gst/lib/pkgconfig:/opt/gst/lib/aarch64-linux-gnu/pkgconfig:/opt/gst/lib/x86_64-linux-gnu/pkgconfig:/opt/gst/share/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig
+ENV PATH=/opt/gst/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/gst/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+
+RUN set -eux; \
+  git clone https://gitlab.freedesktop.org/gstreamer/gst-plugins-rs.git; \
+  cd gst-plugins-rs; \
+  git fetch --tags; \
+  (git checkout "refs/tags/${GST_PLUGINS_RS_REF}" || git checkout "refs/tags/v${GST_PLUGINS_RS_REF}"); \
+  . "$HOME/.cargo/env"; \
+  cargo cbuild -p gst-plugin-webrtc --release; \
+  cargo cbuild -p gst-plugin-rtp --release; \
+  mkdir -p /out-plugins; \
+  cp "$(find /build/gst-plugins-rs/target -type f -name 'libgstrswebrtc.so' | head -n1)" /out-plugins/libgstrswebrtc.so; \
+  cp "$(find /build/gst-plugins-rs/target -type f -name 'libgstrsrtp.so'    | head -n1)" /out-plugins/libgstrsrtp.so; \
+  ls -lh /out-plugins
+
+# ============================================================
+# Stage 3: Assemble the base runtime image (no Go binary yet)
+# ============================================================
+FROM ubuntu:24.04
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN set -eux; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libglib2.0-0 liborc-0.4-0 libssl3 libgcc-s1 libstdc++6 zlib1g \
+    libgudev-1.0-0 libunwind8 libdrm2 libsrtp2-1 \
+    libjpeg-turbo8 libpng16-16 libvpx9 libx264-164 libx265-199 \
+    libopus0 libvorbis0a libvorbisenc2 libtheora0 libspeex1 libmp3lame0 \
+    libasound2t64 v4l-utils alsa-utils \
+    libnice10 \
+  ; \
+  rm -rf /var/lib/apt/lists/*
+
+COPY --from=media-builder     /opt/gst                                   /opt/gst
+COPY --from=rsplugins-builder /out-plugins/libgstrswebrtc.so             /opt/gst/lib/gstreamer-1.0/
+COPY --from=rsplugins-builder /out-plugins/libgstrsrtp.so                /opt/gst/lib/gstreamer-1.0/
+
+ENV PATH=/opt/gst/bin:$PATH
+ENV LD_LIBRARY_PATH=/opt/gst/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+ENV GST_PLUGIN_SYSTEM_PATH_1_0=/opt/gst/lib/gstreamer-1.0
+ENV GST_PLUGIN_SCANNER=/opt/gst/libexec/gstreamer-1.0/gst-plugin-scanner
+ENV GST_PLUGIN_PATH=/opt/gst/lib/gstreamer-1.0${GST_PLUGIN_PATH:+:$GST_PLUGIN_PATH}
+
+# Verify shared-lib deps and GStreamer elements
+RUN set -eux; \
+  rm -f /root/.cache/gstreamer-1.0/registry.*.bin || true; \
+  \
+  for so in \
+    $(find /opt/gst/lib/gstreamer-1.0 -maxdepth 1 -type f -name '*nice*.so') \
+    /opt/gst/lib/gstreamer-1.0/libgstrswebrtc.so \
+    /opt/gst/lib/gstreamer-1.0/libgstrsrtp.so; do \
+    echo "ldd $so"; \
+    ldd "$so" | grep "not found" && exit 1 || true; \
+  done; \
+  \
+  gst-inspect-1.0 nicesrc           >/dev/null; \
+  gst-inspect-1.0 nicesink          >/dev/null; \
+  gst-inspect-1.0 webrtcbin         >/dev/null; \
+  gst-inspect-1.0 janusvrwebrtcsink >/dev/null; \
+  gst-inspect-1.0 rtpgccbwe         >/dev/null; \
+  echo "Base image GStreamer verify OK"
+
+RUN mkdir -p /opt/mavsphere-layout-agent /config

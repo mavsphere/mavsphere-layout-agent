@@ -1,0 +1,72 @@
+name: mavsphere-agent
+
+# Runs on the home machine (Raspberry Pi or Linux PC) next to the layout.
+#
+# Services:
+#   mosquitto     — local MQTT broker for ESP32 sensor nodes
+#   layout-agent  — bridges local sensors to the MavSphere cloud backend
+#
+# Quick start:
+#   cp ../config.json.example config/config.json
+#   nano config/config.json          # fill in backend URL + credentials
+#   ./update.sh                      # pulls latest image and starts services
+#
+# Config UI available at:  http://<machine-ip>:8091
+# Sensor nodes connect to: tcp://<machine-ip>:1883
+
+services:
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_log:/mosquitto/log
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 1883 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  layout-agent:
+    network_mode: host
+    privileged: true
+    image: mavsphere/layout-agent:latest
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    volumes:
+      - ./config-agent:/config
+      - /dev:/dev
+    # ── Hardware devices ──────────────────────────────────────────────────────
+    # Uncomment the lines that match your hardware setup.
+    #
+    # DCC-EX via USB serial (most common):
+    #   devices:
+    #     - /dev/ttyUSB0:/dev/ttyUSB0
+    #
+    # DCC-EX via USB-ACM (some Arduino boards):
+    #   devices:
+    #     - /dev/ttyACM0:/dev/ttyACM0
+    #
+    # Cameras (add one line per camera device):
+    #   devices:
+    #     - /dev/video0:/dev/video0
+    #     - /dev/video2:/dev/video2
+    #
+    # Example with everything:
+    # devices:
+    #   - /dev/ttyUSB0:/dev/ttyUSB0
+    #   - /dev/video0:/dev/video0
+    #   - /dev/video2:/dev/video2
+    ports:
+      - "8091:8091"                  # config web UI
+
+volumes:
+  mosquitto_data:
+  mosquitto_log:

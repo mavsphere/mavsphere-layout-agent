@@ -1,0 +1,16 @@
+services:
+  simulator:
+    image: mavsphere/layout-simulator:latest
+    restart: unless-stopped
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    command: ["-config", "/config/config.json"]
+    volumes:
+      - ./config-simulator:/config:ro
+    ports:
+      - "2560:2560"
+
+  layout-agent:
+    volumes:
+      - ./config-agent-with-sim:/config

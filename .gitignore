@@ -1,0 +1,115 @@
+# ------------------------------
+# Local runtime / app config
+# ------------------------------
+config/
+config.local/
+.env
+.env.*
+!.env.example
+!.env.
+deploy/config-agent/config.json*
+deploy/config-agent-with-sim/config.json*
+
+# ------------------------------
+# Binaries / build outputs
+# ------------------------------
+bin/
+build/
+dist/
+out/
+release/
+coverage/
+tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.a
+
+# ------------------------------
+# Go coverage / profiling
+# ------------------------------
+*.cover
+*.coverprofile
+coverage.out
+cover.out
+cpu.prof
+mem.prof
+profile.out
+
+# ------------------------------
+# Go workspace / vendoring
+# ------------------------------
+vendor/
+go.work.sum
+
+# ------------------------------
+# Logs
+# ------------------------------
+*.log
+logs/
+*.pid
+*.seed
+
+# ------------------------------
+# Archives / packaged artifacts
+# ------------------------------
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.xz
+*.gz
+*.7z
+
+# ------------------------------
+# Docker / build cache
+# ------------------------------
+.buildx-cache/
+docker-cache/
+*.dockerbuild
+
+# ------------------------------
+# IDEs / editors
+# ------------------------------
+.vscode/
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ------------------------------
+# OS files
+# ------------------------------
+.DS_Store
+Thumbs.db
+
+# ------------------------------
+# Test / temp / local scratch
+# ------------------------------
+*.tmp
+*.bak
+*.orig
+
+# ------------------------------
+# Optional: generated certs / keys
+# Uncomment if you store local dev certs in repo root
+# ------------------------------
+# *.pem
+# *.key
+# *.crt
+
+# ------------------------------
+# Optional: ignore local sqlite dbs
+# Uncomment if applicable
+# ------------------------------
+# *.db
+# *.sqlite
+# *.sqlite3deploy/config/config.json
+deploy/config/config.json*
