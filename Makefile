@@ -1,5 +1,5 @@
 APP_NAME  ?= layout-agent
-REGISTRY  ?= mavsphere
+REGISTRY  ?= ghcr.io/mavsphere
 IMAGE     := $(REGISTRY)/$(APP_NAME)
 BASE_IMAGE := $(REGISTRY)/$(APP_NAME)-base
 
@@ -135,7 +135,7 @@ docker-buildx-base-load: buildx-setup
 
 # ── Agent image — fast day-to-day build (Go only) ────────────────────────────
 #
-# Requires mavsphere/layout-agent-base:$(BASE_TAG) to already exist on Docker Hub.
+# Requires ghcr.io/mavsphere/layout-agent-base:$(BASE_TAG) to already exist on GHCR.
 # Build + push multi-arch:
 #   make docker-buildx
 #
@@ -185,8 +185,8 @@ clean:
 	rm -rf bin/
 
 docker-login:
-	@echo "Logging in to Docker Hub..."
-	docker login -u $${DOCKERHUB_USERNAME} --password-stdin <<< $${DOCKERHUB_TOKEN}
+	@echo "Logging in to GHCR..."
+	@echo "$${GITHUB_TOKEN}" | docker login ghcr.io -u "$${GITHUB_ACTOR}" --password-stdin
 
 help:
 	@echo ""
