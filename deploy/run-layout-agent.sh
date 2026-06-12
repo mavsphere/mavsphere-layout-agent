@@ -13,7 +13,7 @@
 #   ./deploy/update.sh
 #
 # What it does:
-#   - Pulls the latest layout-agent image from Docker Hub
+#   - Pulls the latest layout-agent image from GHCR
 #   - Stops and removes any existing agent containers
 #   - Starts Mosquitto and the agent fresh with the new image
 #   - Your config is always preserved — it lives in ./config/config.json
@@ -133,7 +133,7 @@ fi
 # ── Pull latest image ─────────────────────────────────────────────────────────
 header "Updating to latest release"
 info "Pulling latest image..."
-docker pull mavsphere/layout-agent:latest
+docker pull ghcr.io/mavsphere/layout-agent:latest
 
 # ── Stop existing containers ──────────────────────────────────────────────────
 info "Stopping existing containers..."

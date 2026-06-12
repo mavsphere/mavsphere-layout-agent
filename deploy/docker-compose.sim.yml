@@ -1,6 +1,6 @@
 services:
   simulator:
-    image: mavsphere/layout-simulator:latest
+    image: ghcr.io/mavsphere/layout-simulator:latest
     restart: unless-stopped
     depends_on:
       mosquitto:

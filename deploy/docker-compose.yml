@@ -35,7 +35,7 @@ services:
   layout-agent:
     network_mode: host
     privileged: true
-    image: mavsphere/layout-agent:latest
+    image: ghcr.io/mavsphere/layout-agent:latest
     restart: unless-stopped
     depends_on:
       mosquitto:
