@@ -62,7 +62,17 @@ func (m *CameraManager) StartCamera(ctx context.Context, cameraSlug string, room
 		camCfg.VideoFps = cam.Fps
 	}
 
-	mgr := agentmedia.NewManager(&camCfg, cam.Device, "", m.logger)
+	var mgr *agentmedia.Manager
+	switch cam.Source {
+	case config.CameraSourceRTSP, config.CameraSourceHTTPMJPEG:
+		if cam.RTSPURL == "" {
+			return fmt.Errorf("camera %q: source=%s but rtspUrl is empty", cameraSlug, cam.Source)
+		}
+		mgr = agentmedia.NewIPSourceManager(&camCfg, cam.Source, cam.RTSPURL, cam.RTSPTransport, cam.BufferMs, m.logger)
+	default:
+		// USB / V4L2 (default)
+		mgr = agentmedia.NewManager(&camCfg, cam.Device, "", m.logger)
+	}
 	mgr.SetICE(ctx, ice)
 
 	if err := mgr.Start(ctx, roomID); err != nil {

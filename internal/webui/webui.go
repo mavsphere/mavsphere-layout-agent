@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -488,6 +489,8 @@ func Start(addr, cfgPath string) *Server {
 
 	// ── /api/cameras/check ────────────────────────────────────────────────────
 	// Checks each configured camera device and returns its status + caps.
+	// For USB cameras: runs v4l2-ctl to enumerate modes.
+	// For RTSP/HTTP-MJPEG cameras: does a TCP dial to confirm host reachability.
 	// Used by the UI "Check cameras" feature on startup.
 	mux.HandleFunc("/api/cameras/check", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -503,30 +506,63 @@ func Start(addr, cfgPath string) *Server {
 		type camResult struct {
 			CameraID string            `json:"cameraId"`
 			Label    string            `json:"label"`
-			Device   string            `json:"device"`
+			Source   string            `json:"source"`
+			Device   string            `json:"device,omitempty"`
+			RTSPURL  string            `json:"rtspUrl,omitempty"`
 			OK       bool              `json:"ok"`
 			Error    string            `json:"error,omitempty"`
 			Caps     *device.VideoCaps `json:"caps,omitempty"`
 		}
 		var out []camResult
 		for _, c := range cfg.Cameras {
-			caps, err := device.GetVideoCaps(c.Device)
-			if err != nil {
-				out = append(out, camResult{
-					CameraID: c.CameraID,
-					Label:    c.Label,
-					Device:   c.Device,
-					OK:       false,
-					Error:    err.Error(),
-				})
-			} else {
-				out = append(out, camResult{
-					CameraID: c.CameraID,
-					Label:    c.Label,
-					Device:   c.Device,
-					OK:       true,
-					Caps:     caps,
-				})
+			src := c.Source
+			if src == "" {
+				src = "usb"
+			}
+			switch src {
+			case "rtsp", "http_mjpeg":
+				// TCP connectivity probe: extract host:port from URL
+				u := c.RTSPURL
+				host, dialErr := probeIPCameraURL(u)
+				if dialErr != nil {
+					out = append(out, camResult{
+						CameraID: c.CameraID,
+						Label:    c.Label,
+						Source:   src,
+						RTSPURL:  u,
+						OK:       false,
+						Error:    fmt.Sprintf("unreachable (%s): %v", host, dialErr),
+					})
+				} else {
+					out = append(out, camResult{
+						CameraID: c.CameraID,
+						Label:    c.Label,
+						Source:   src,
+						RTSPURL:  u,
+						OK:       true,
+					})
+				}
+			default:
+				caps, err := device.GetVideoCaps(c.Device)
+				if err != nil {
+					out = append(out, camResult{
+						CameraID: c.CameraID,
+						Label:    c.Label,
+						Source:   src,
+						Device:   c.Device,
+						OK:       false,
+						Error:    err.Error(),
+					})
+				} else {
+					out = append(out, camResult{
+						CameraID: c.CameraID,
+						Label:    c.Label,
+						Source:   src,
+						Device:   c.Device,
+						OK:       true,
+						Caps:     caps,
+					})
+				}
 			}
 		}
 		writeJSON(w, map[string]any{"cameras": out})
@@ -606,6 +642,14 @@ func normalizeCameraConfigs(cfg *config.AgentConfig) error {
 		c.Type = strings.TrimSpace(c.Type)
 		c.Device = strings.TrimSpace(c.Device)
 		c.TrainSlug = strings.TrimSpace(c.TrainSlug)
+		c.Source = strings.ToLower(strings.TrimSpace(c.Source))
+		c.RTSPURL = strings.TrimSpace(c.RTSPURL)
+		c.RTSPTransport = strings.ToLower(strings.TrimSpace(c.RTSPTransport))
+
+		// Default source to "usb" for backward compat
+		if c.Source == "" {
+			c.Source = config.CameraSourceUSB
+		}
 
 		if c.Type == "" {
 			c.Type = "OVERVIEW"
@@ -617,8 +661,26 @@ func normalizeCameraConfigs(cfg *config.AgentConfig) error {
 		if c.CameraID == "" {
 			c.CameraID = slugCameraID(c.Label)
 		}
-		if c.CameraID == "" && c.Device != "" {
-			c.CameraID = "cam-" + slugCameraID(filepath.Base(c.Device))
+		if c.CameraID == "" {
+			switch c.Source {
+			case config.CameraSourceRTSP, config.CameraSourceHTTPMJPEG:
+				// derive id from URL host part
+				if c.RTSPURL != "" {
+					// strip scheme, use host
+					u := c.RTSPURL
+					if idx := strings.Index(u, "://"); idx >= 0 {
+						u = u[idx+3:]
+					}
+					if idx := strings.IndexAny(u, "/:"); idx > 0 {
+						u = u[:idx]
+					}
+					c.CameraID = "cam-" + slugCameraID(strings.ReplaceAll(u, ".", "-"))
+				}
+			default:
+				if c.Device != "" {
+					c.CameraID = "cam-" + slugCameraID(filepath.Base(c.Device))
+				}
+			}
 		}
 		if c.CameraID == "" {
 			return fmt.Errorf("camera %d is missing a camera name", i+1)
@@ -632,8 +694,18 @@ func normalizeCameraConfigs(cfg *config.AgentConfig) error {
 		if c.Label == "" {
 			c.Label = c.CameraID
 		}
-		if c.Device == "" {
-			return fmt.Errorf("camera %q is missing a device", c.Label)
+
+		// Source-specific required field validation
+		switch c.Source {
+		case config.CameraSourceRTSP, config.CameraSourceHTTPMJPEG:
+			if c.RTSPURL == "" {
+				return fmt.Errorf("camera %q: source=%s requires rtspUrl", c.Label, c.Source)
+			}
+		default:
+			// USB
+			if c.Device == "" {
+				return fmt.Errorf("camera %q is missing a device", c.Label)
+			}
 		}
 
 		seen[c.CameraID]++
@@ -822,6 +894,40 @@ func normaliseJmriPanelType(t string) string {
 		}
 		return t
 	}
+}
+
+// probeIPCameraURL extracts host:port from a camera URL and tries a TCP dial.
+// Returns the host string and any error. Used by /api/cameras/check for IP sources.
+func probeIPCameraURL(rawURL string) (string, error) {
+	if rawURL == "" {
+		return "", fmt.Errorf("empty URL")
+	}
+	// Parse as URL; fall back to treating it as host:port directly.
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL, fmt.Errorf("invalid URL: %w", err)
+	}
+	host := u.Hostname()
+	port := u.Port()
+	if port == "" {
+		switch strings.ToLower(u.Scheme) {
+		case "rtsp", "rtsps":
+			port = "554"
+		case "http":
+			port = "80"
+		case "https":
+			port = "443"
+		default:
+			port = "554"
+		}
+	}
+	addr := net.JoinHostPort(host, port)
+	conn, dialErr := net.DialTimeout("tcp", addr, 3*time.Second)
+	if dialErr != nil {
+		return addr, dialErr
+	}
+	conn.Close()
+	return addr, nil
 }
 
 // scanAllVideoDevices enumerates /dev/video* and returns caps for each capture-capable device.

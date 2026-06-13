@@ -33,7 +33,38 @@
   "webrtcMaxBitrateBps":   1500000,
   "webrtcMinBitrateBps":   150000,
 
-  "cameras": [],
+  "cameras": [
+    {
+      "_comment": "USB camera example",
+      "label": "Layout overview",
+      "type": "OVERVIEW",
+      "source": "usb",
+      "device": "/dev/video0"
+    },
+    {
+      "_comment": "ESP32-CAM via mediamtx RTSP — recommended for train FPV. Use rtspTransport=tcp for Wi-Fi reliability.",
+      "label": "Loco 1 FPV",
+      "type": "ONBOARD",
+      "trainSlug": "loco-1",
+      "source": "rtsp",
+      "rtspUrl": "rtsp://192.168.1.42:8554/stream",
+      "rtspTransport": "tcp",
+      "bufferMs": 150,
+      "width": 640,
+      "height": 480,
+      "fps": 15
+    },
+    {
+      "_comment": "ESP32-CAM Arduino CameraWebServer sketch — HTTP MJPEG on port 81.",
+      "label": "Yard cam",
+      "type": "YARD",
+      "source": "http_mjpeg",
+      "rtspUrl": "http://192.168.1.43:81/stream",
+      "width": 640,
+      "height": 480,
+      "fps": 15
+    }
+  ],
 
   "allowControl": true,
 

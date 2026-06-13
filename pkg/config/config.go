@@ -10,6 +10,18 @@ import (
 	"sync"
 )
 
+// CameraSource describes where the video comes from.
+// "usb"        – V4L2 device at Device path (default; backward-compatible)
+// "rtsp"       – RTSP stream at RTSPURL (e.g. ESP32-CAM, IP camera, Pi via mediamtx)
+// "http_mjpeg" – HTTP MJPEG stream at RTSPURL (e.g. ESP32-CAM /stream endpoint)
+type CameraSource = string
+
+const (
+	CameraSourceUSB       CameraSource = "usb"
+	CameraSourceRTSP      CameraSource = "rtsp"
+	CameraSourceHTTPMJPEG CameraSource = "http_mjpeg"
+)
+
 type CameraConfig struct {
 	CameraID  string `json:"cameraId"`
 	Label     string `json:"label"`
@@ -17,9 +29,33 @@ type CameraConfig struct {
 	Device    string `json:"device"`
 	TrainSlug string `json:"trainSlug"`
 
+	// Source selects the capture mechanism.  Empty / absent means "usb" so
+	// existing configs require no changes.
+	Source string `json:"source,omitempty"`
+
+	// RTSPURL is used when Source is "rtsp" or "http_mjpeg".
+	// Examples:
+	//   rtsp://192.168.1.42:8554/stream   (ESP32-CAM via mediamtx)
+	//   rtsp://192.168.1.42/stream1        (generic IP cam)
+	//   http://192.168.1.42:81/stream      (ESP32-CAM Arduino sketch MJPEG)
+	RTSPURL string `json:"rtspUrl,omitempty"`
+
+	// RTSPTransport overrides the GStreamer rtspsrc protocols property.
+	// Values: "tcp" | "udp" | "udp-mcast" | "http" | "tls" | "auto" (default).
+	// Use "tcp" for ESP32-CAM which struggles with UDP reassembly over Wi-Fi.
+	RTSPTransport string `json:"rtspTransport,omitempty"`
+
+	// BufferMs is the rtspsrc/souphttpsrc latency buffer in milliseconds.
+	// 0 = use built-in default (200ms for RTSP, 0 for HTTP-MJPEG).
+	// Lower values reduce latency but increase risk of decode artefacts on
+	// poor Wi-Fi.  100–300 ms is a reasonable range for local ESP32-CAM use.
+	BufferMs int `json:"bufferMs,omitempty"`
+
 	// Per-camera resolution/fps overrides.
 	// When non-zero, these take precedence over the global VideoWidth/VideoHeight/VideoFps.
 	// Zero means "use global default", so existing configs are unaffected.
+	// For RTSP/HTTP-MJPEG sources these are passed as capsfilter hints only;
+	// the stream resolution is ultimately whatever the remote end sends.
 	Width  int `json:"width,omitempty"`
 	Height int `json:"height,omitempty"`
 	Fps    int `json:"fps,omitempty"`

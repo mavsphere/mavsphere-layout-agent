@@ -394,13 +394,13 @@
 
   <!-- CAMERAS -->
   <h2>Cameras</h2>
-  <p class="muted">Each camera is published as a separate WebRTC stream via Janus. Leave the list empty if you have no cameras. Camera IDs are generated automatically from the camera name.</p>
+  <p class="muted">Each camera is published as a separate WebRTC stream via Janus. Leave the list empty if you have no cameras. Camera IDs are generated automatically from the camera name. Use <strong>USB</strong> for local V4L2 devices, <strong>RTSP</strong> for IP cameras (ESP32-CAM via mediamtx, NVR, Pi), or <strong>HTTP MJPEG</strong> for ESP32-CAM Arduino sketch streams.</p>
 
   <div class="list-header">
     <h3>Camera list</h3>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="small" id="btnCheckCameras">⟳ Check cameras</button>
-      <button class="small" id="btnScanCameras">🔍 Scan for cameras</button>
+      <button class="small" id="btnScanCameras">🔍 Scan for USB cameras</button>
       <button class="small" id="btnAddCamera">+ Add camera</button>
     </div>
   </div>
@@ -409,7 +409,8 @@
       <tr>
         <th>Camera name</th>
         <th>Type</th>
-        <th>Device</th>
+        <th>Source</th>
+        <th>Device / URL</th>
         <th>Resolution</th>
         <th>FPS</th>
         <th>Train (ONBOARD only)</th>
@@ -535,10 +536,11 @@
 
   <h3>Step 6 — Configure cameras</h3>
   <p class="muted">
-    Add any local camera devices you want the agent to publish through Janus WebRTC.
-    Enter a friendly <strong>Camera name</strong>; the agent generates the internal camera ID automatically from that name.
-    Use <strong>Scan for cameras</strong> to find capture devices and supported modes. Typical Linux device paths are <span class="kbd">/dev/video0</span> and <span class="kbd">/dev/video2</span>.
-    Use camera type <strong>ONBOARD</strong> only when a camera should be tied to a specific train. The train field can be selected from the detected train list or typed manually if the train has not been created yet.
+    Add any cameras you want the agent to publish through Janus WebRTC.
+    Choose a <strong>Source</strong> type: <strong>USB / V4L2</strong> for local USB/CSI cameras (use <strong>Scan for USB cameras</strong> to detect devices),
+    <strong>RTSP</strong> for IP cameras (ESP32-CAM via mediamtx, IP cams, NVRs, Pi cameras) — example: <span class="kbd">rtsp://192.168.1.42:8554/stream</span>, use TCP transport for ESP32-CAM over Wi-Fi,
+    or <strong>HTTP MJPEG</strong> for ESP32-CAM Arduino sketch streams — example: <span class="kbd">http://192.168.1.42:81/stream</span>.
+    Use camera type <strong>ONBOARD</strong> only when a camera should be tied to a specific train.
   </p>
 
   <h3>Step 7 — Start and verify</h3>
@@ -582,7 +584,9 @@
   <ul class="muted" style="margin-top:8px; line-height:1.6;">
     <li>Check the <strong>Live Stream Status</strong> panel — if codec shows <span class="kbd">—</span> no stream is running</li>
     <li>Check agent logs for <span class="kbd">[stream] starting gst-launch</span> and any errors that follow</li>
-    <li>Confirm the camera device exists at the configured <span class="kbd">/dev/videoX</span> path</li>
+    <li>Confirm USB cameras exist at the configured <span class="kbd">/dev/videoX</span> path</li>
+    <li>For RTSP cameras: use <strong>Check cameras</strong> to verify the host is reachable; try <strong>TCP only</strong> transport for ESP32-CAM over Wi-Fi; confirm mediamtx or the camera's RTSP server is running</li>
+    <li>For HTTP MJPEG: confirm the ESP32-CAM is on the network and the <span class="kbd">/stream</span> path is correct (Arduino CameraWebServer default: port 81)</li>
     <li>Try a lower resolution or frame rate</li>
     <li>Check Janus connectivity and ICE/TURN configuration if WebRTC sessions fail</li>
     <li>Run <span class="kbd">gst-inspect-1.0 x264enc</span> to confirm the encoder plugin is installed</li>
@@ -850,6 +854,14 @@
   function generatedCameraId(c) {
     const fromLabel = slugifyCameraId(c.label);
     if (fromLabel) return fromLabel;
+    const source = c.source || 'usb';
+    if (source === 'rtsp' || source === 'http_mjpeg') {
+      // derive from URL host
+      const u = String(c.rtspUrl || '');
+      const m = u.match(/^[a-z]+:\/\/([^/:]+)/i);
+      if (m) return 'cam-' + slugifyCameraId(m[1].replace(/\./g, '-'));
+      return '';
+    }
     const fromDevice = slugifyCameraId(String(c.device || '').replace(/^.*\//, ''));
     if (fromDevice) return 'cam-' + fromDevice;
     return '';
@@ -868,15 +880,28 @@
   function cameraValidation(c, counts) {
     const name = String(c.label || '').trim();
     const id = generatedCameraId(c);
+    const source = c.source || 'usb';
     const device = String(c.device || '').trim();
+    const rtspUrl = String(c.rtspUrl || '').trim();
     const type = c.type || 'OVERVIEW';
     const trainSlug = String(c.trainSlug || '').trim();
+
+    const isIP = source === 'rtsp' || source === 'http_mjpeg';
+    let deviceOk, deviceMsg;
+    if (isIP) {
+      const urlOk = rtspUrl.length > 0 && (rtspUrl.startsWith('rtsp://') || rtspUrl.startsWith('rtsps://') || rtspUrl.startsWith('http://') || rtspUrl.startsWith('https://'));
+      deviceOk = urlOk;
+      deviceMsg = !rtspUrl ? 'Required — enter a stream URL' : (!urlOk ? 'Must start with rtsp:// or http://' : 'OK');
+    } else {
+      deviceOk = !!device;
+      deviceMsg = device ? 'OK' : 'Required — choose or enter a device';
+    }
     return {
       id,
       nameOk: !!name && !!id && counts[id] === 1,
       nameMsg: !name ? 'Required — enter a camera name' : (!id ? 'Use letters or numbers in the name' : (counts[id] > 1 ? 'Camera name must be unique' : 'OK')),
-      deviceOk: !!device,
-      deviceMsg: device ? 'OK' : 'Required — choose or enter a device',
+      deviceOk,
+      deviceMsg,
       trainOk: type !== 'ONBOARD' || true,
       trainMsg: type === 'ONBOARD'
         ? (trainSlug ? 'Linked to train slug ' + trainSlug : 'Optional — select a train or type a slug later')
@@ -927,18 +952,27 @@
         if (!st.ok) {
           statusCell = `<span class="err" style="font-size:12px" title="${esc(st.error || '')}">✗ ${esc((st.error || 'error').split(':').pop().trim().slice(0,40))}</span>`;
         } else {
-          const warnings = capsWarnings(st);
-          if (warnings.length > 0) {
-            const tip = warnings.join('\n');
-            const short = warnings[0].slice(0, 38) + (warnings[0].length > 38 ? '…' : '');
-            statusCell = `<span class="warn" style="font-size:12px" title="${esc(tip)}">⚠ ${esc(short)}</span>` +
-              (warnings.length > 1 ? `<br><span class="muted" style="font-size:11px">(+${warnings.length - 1} more)</span>` : '');
+          const stSource = st.source || 'usb';
+          const isIPSt = stSource === 'rtsp' || stSource === 'http_mjpeg';
+          if (isIPSt) {
+            // IP camera: reachable confirmed by TCP probe, no caps expected
+            const hint = st.rtspUrl ? `Reachable: ${st.rtspUrl}` : 'Reachable';
+            statusCell = `<span class="ok" style="font-size:12px" title="${esc(hint)}">✓ Reachable</span>` +
+              `<br><span class="muted" style="font-size:11px">${stSource === 'http_mjpeg' ? 'HTTP MJPEG' : 'RTSP'}</span>`;
           } else {
-            const modeSummary = st.caps && st.caps.modes
-              ? [...new Set(st.caps.modes.map(m => `${m.pixFmt} ${m.width}x${m.height}`))].slice(0,3).join(', ') + (st.caps.modes.length > 3 ? '…' : '')
-              : '';
-            statusCell = `<span class="ok" style="font-size:12px" title="${esc(modeSummary)}">✓ OK</span>` +
-              (modeSummary ? `<br><span class="muted" style="font-size:11px">${esc(modeSummary)}</span>` : '');
+            const warnings = capsWarnings(st);
+            if (warnings.length > 0) {
+              const tip = warnings.join('\n');
+              const short = warnings[0].slice(0, 38) + (warnings[0].length > 38 ? '…' : '');
+              statusCell = `<span class="warn" style="font-size:12px" title="${esc(tip)}">⚠ ${esc(short)}</span>` +
+                (warnings.length > 1 ? `<br><span class="muted" style="font-size:11px">(+${warnings.length - 1} more)</span>` : '');
+            } else {
+              const modeSummary = st.caps && st.caps.modes
+                ? [...new Set(st.caps.modes.map(m => `${m.pixFmt} ${m.width}x${m.height}`))].slice(0,3).join(', ') + (st.caps.modes.length > 3 ? '…' : '')
+                : '';
+              statusCell = `<span class="ok" style="font-size:12px" title="${esc(modeSummary)}">✓ OK</span>` +
+                (modeSummary ? `<br><span class="muted" style="font-size:11px">${esc(modeSummary)}</span>` : '');
+            }
           }
         }
       }
@@ -1001,6 +1035,43 @@
         ...sortedFps.map(f => `<option value="${f}" ${fpsDisplayVal === f ? 'selected' : ''}>${f} fps</option>`)
       ].join('');
 
+      const source = c.source || 'usb';
+      const isIP = source === 'rtsp' || source === 'http_mjpeg';
+      const sourceOpts = [
+        { v: 'usb',        l: 'USB / V4L2' },
+        { v: 'rtsp',       l: 'RTSP' },
+        { v: 'http_mjpeg', l: 'HTTP MJPEG' },
+      ].map(o => `<option value="${o.v}" ${source === o.v ? 'selected' : ''}>${o.l}</option>`).join('');
+
+      let deviceCell;
+      if (isIP) {
+        const rtspTransportOpts = [
+          { v: '',    l: 'Auto (tcp+udp)' },
+          { v: 'tcp', l: 'TCP only — best for ESP32-CAM/Wi-Fi' },
+          { v: 'udp', l: 'UDP only' },
+        ].map(o => `<option value="${o.v}" ${(c.rtspTransport||'') === o.v ? 'selected' : ''}>${o.l}</option>`).join('');
+        const bufVal = c.bufferMs || 0;
+        const placeholder = source === 'http_mjpeg' ? 'http://192.168.x.x:81/stream' : 'rtsp://192.168.x.x:8554/stream';
+        deviceCell = `
+          <input value="${esc(c.rtspUrl)}" placeholder="${placeholder}"
+            oninput="cameras[${i}].rtspUrl=this.value" onchange="renderCameras()" style="min-width:200px;width:100%" />
+          <div class="field-note ${v.deviceOk ? 'ok' : 'warn'}">${esc(v.deviceMsg)}</div>
+          <div style="display:flex;gap:6px;margin-top:4px;align-items:center;flex-wrap:wrap">
+            ${source === 'rtsp' ? `<select title="RTSP transport" style="font-size:11px" onchange="cameras[${i}].rtspTransport=this.value;renderCameras()">${rtspTransportOpts}</select>` : ''}
+            <label style="font-size:11px;font-weight:normal;display:flex;align-items:center;gap:4px">
+              Buffer&nbsp;<input type="number" min="0" max="2000" step="50" value="${bufVal}"
+                style="width:52px;font-size:11px" oninput="cameras[${i}].bufferMs=Number(this.value)||0" />&nbsp;ms
+              <span class="muted" title="Jitter/latency buffer. 0=default (200ms for RTSP, 0 for HTTP). Lower=less lag but risks artefacts on Wi-Fi.">[?]</span>
+            </label>
+          </div>`;
+      } else {
+        deviceCell = `
+          <input value="${esc(c.device)}" placeholder="/dev/video0" oninput="cameras[${i}].device=this.value" onchange="renderCameras()" />
+          <div class="field-note ${v.deviceOk ? 'ok' : 'warn'}">${esc(v.deviceMsg)}</div>`;
+      }
+
+      const showCapsHint = !isIP && modes.length === 0;
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>
@@ -1010,12 +1081,14 @@
         </td>
         <td><select onchange="cameras[${i}].type=this.value; if (this.value !== 'ONBOARD') cameras[${i}].trainSlug=''; renderCameras()">${typeOpts}</select></td>
         <td>
-          <input value="${esc(c.device)}" placeholder="/dev/video0" oninput="cameras[${i}].device=this.value" onchange="renderCameras()" />
-          <div class="field-note ${v.deviceOk ? 'ok' : 'warn'}">${esc(v.deviceMsg)}</div>
+          <select onchange="cameras[${i}].source=this.value; if(this.value!=='rtsp') cameras[${i}].rtspTransport=''; renderCameras()">${sourceOpts}</select>
+          ${isIP ? `<div class="field-note ok" style="font-size:11px">${source === 'http_mjpeg' ? 'ESP32-CAM /stream' : 'RTSP — ESP32/Pi/NVR'}</div>` : ''}
         </td>
+        <td>${deviceCell}</td>
         <td>
           <select onchange="(function(v){ const p=v.split('x'); cameras[${i}].width=Number(p[0])||0; cameras[${i}].height=Number(p[1])||0; renderCameras(); })(this.value)">${resOpts}</select>
-          ${modes.length === 0 ? '<div class="field-note warn" style="font-size:11px">Check cameras to see supported modes</div>' : ''}
+          ${showCapsHint ? '<div class="field-note warn" style="font-size:11px">Check cameras to see supported modes</div>' : ''}
+          ${isIP ? '<div class="field-note ok" style="font-size:11px">Applied as resize hint after decode</div>' : ''}
         </td>
         <td>
           <select onchange="cameras[${i}].fps=Number(this.value); renderCameras()">${fpsOpts}</select>
@@ -1035,7 +1108,7 @@
   }
 
   $('btnAddCamera').addEventListener('click', () => {
-    cameras.push({ cameraId: '', label: nextCameraName('Camera'), type: 'OVERVIEW', device: '', trainSlug: '', width: 0, height: 0, fps: 0 });
+    cameras.push({ cameraId: '', label: nextCameraName('Camera'), type: 'OVERVIEW', source: 'usb', device: '', rtspUrl: '', rtspTransport: '', bufferMs: 0, trainSlug: '', width: 0, height: 0, fps: 0 });
     markFormDirty();
     renderCameras();
   });
@@ -1114,7 +1187,7 @@
   function addCameraFromScan(device) {
     const base = String(device || '').replace(/.*\//, '') || 'camera';
     const pretty = base.replace(/-/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
-    cameras.push({ cameraId: '', label: nextCameraName(pretty), type: 'OVERVIEW', device: device, trainSlug: '', width: 0, height: 0, fps: 0 });
+    cameras.push({ cameraId: '', label: nextCameraName(pretty), type: 'OVERVIEW', source: 'usb', device: device, rtspUrl: '', rtspTransport: '', bufferMs: 0, trainSlug: '', width: 0, height: 0, fps: 0 });
     markFormDirty();
     renderCameras();
     $('camScanPanel').style.display = 'none';
@@ -1181,7 +1254,7 @@
       trains  = (cfg.trains  || []).map(t => ({ trainId: t.trainId ?? 0, trainSlug: t.trainSlug ?? '', dccAddress: t.dccAddress ?? t.jmriAddress ?? 0, displayName: t.displayName ?? '', guardingSignal: t.guardingSignal ?? '', startBlock: t.startBlock ?? '' }));
       cameras = (cfg.cameras || []).map((c, i) => {
         const label = c.label || c.cameraId || `Camera ${i + 1}`;
-        return { cameraId: c.cameraId ?? '', label, type: c.type ?? 'OVERVIEW', device: c.device ?? '', trainSlug: c.trainSlug ?? '', width: c.width ?? 0, height: c.height ?? 0, fps: c.fps ?? 0 };
+        return { cameraId: c.cameraId ?? '', label, type: c.type ?? 'OVERVIEW', source: c.source ?? 'usb', device: c.device ?? '', rtspUrl: c.rtspUrl ?? '', rtspTransport: c.rtspTransport ?? '', bufferMs: c.bufferMs ?? 0, trainSlug: c.trainSlug ?? '', width: c.width ?? 0, height: c.height ?? 0, fps: c.fps ?? 0 };
       });
       renderTrains();
       renderCameras();
@@ -1284,14 +1357,18 @@
 
     payload.trains = payload.trains || [];
     payload.cameras = cameras.map(c => ({
-      cameraId:  generatedCameraId(c),
-      label:     String(c.label || '').trim(),
-      type:      c.type,
-      device:    String(c.device || '').trim(),
-      trainSlug: c.type === 'ONBOARD' ? String(c.trainSlug || '').trim() : '',
-      width:     c.width  || 0,
-      height:    c.height || 0,
-      fps:       c.fps    || 0,
+      cameraId:      generatedCameraId(c),
+      label:         String(c.label || '').trim(),
+      type:          c.type,
+      source:        c.source || 'usb',
+      device:        String(c.device || '').trim(),
+      rtspUrl:       String(c.rtspUrl || '').trim(),
+      rtspTransport: String(c.rtspTransport || '').trim(),
+      bufferMs:      c.bufferMs  || 0,
+      trainSlug:     c.type === 'ONBOARD' ? String(c.trainSlug || '').trim() : '',
+      width:         c.width  || 0,
+      height:        c.height || 0,
+      fps:           c.fps    || 0,
     }));
 
     return payload;

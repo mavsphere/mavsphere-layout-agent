@@ -49,6 +49,16 @@ type Manager struct {
 	videoDev string
 	audioDev string
 
+	// IP camera source (populated when source != USB).
+	// ipSource is one of cfg.CameraSourceRTSP / CameraSourceHTTPMJPEG.
+	// ipURL is the full stream URL.
+	// ipTransport is the rtspsrc protocols override (e.g. "tcp").
+	// ipBufferMs is the latency buffer in ms (0 = GStreamer default).
+	ipSource    string
+	ipURL       string
+	ipTransport string
+	ipBufferMs  int
+
 	cmd    *exec.Cmd
 	roomID int64
 	stopCh chan struct{}
@@ -85,6 +95,24 @@ func NewManager(conf *cfg.AgentConfig, videoDev, audioDev string, logger *log.Lo
 		videoDev: videoDev,
 		audioDev: audioDev,
 		logger:   logger,
+	}
+}
+
+// NewIPSourceManager creates a Manager that pulls video from an IP stream
+// (RTSP or HTTP-MJPEG) rather than a local V4L2 device.
+//
+//   source    – cfg.CameraSourceRTSP or cfg.CameraSourceHTTPMJPEG
+//   url       – full stream URL
+//   transport – rtspsrc protocols value ("tcp", "udp", "auto" …); ignored for HTTP-MJPEG
+//   bufferMs  – latency buffer in ms (0 = built-in default)
+func NewIPSourceManager(conf *cfg.AgentConfig, source, url, transport string, bufferMs int, logger *log.Logger) *Manager {
+	return &Manager{
+		conf:        conf,
+		ipSource:    source,
+		ipURL:       url,
+		ipTransport: transport,
+		ipBufferMs:  bufferMs,
+		logger:      logger,
 	}
 }
 
@@ -356,7 +384,23 @@ func (m *Manager) runLoop(ctx context.Context, roomID int64, stopCh chan struct{
 		}
 
 		videoDev := defaultIfEmpty(m.videoDev, "/dev/video0")
-		attempts := buildVideoAttempts(m.conf, videoDev)
+		// For IP camera sources (RTSP / HTTP-MJPEG) there is no V4L2 device to
+		// enumerate; build a single direct attempt using the current config.
+		var attempts []videoAttempt
+		if m.ipSource == cfg.CameraSourceRTSP || m.ipSource == cfg.CameraSourceHTTPMJPEG {
+			attempts = []videoAttempt{
+				{
+					codec:   m.conf.VideoCodec,
+					enc:     m.conf.H264Encoder,
+					w:       m.conf.VideoWidth,
+					h:       m.conf.VideoHeight,
+					fps:     m.conf.VideoFps,
+					useMJPG: false,
+				},
+			}
+		} else {
+			attempts = buildVideoAttempts(m.conf, videoDev)
+		}
 
 		// If ALSA is busy, we can fall back to video-only to keep the stream alive.
 		var disableAudio atomic.Bool
@@ -593,7 +637,12 @@ func (m *Manager) runLoop(ctx context.Context, roomID int64, stopCh chan struct{
 				// Record the attempt that is now actually running so StreamInfo
 				// can report what is live rather than what was merely requested.
 				func() {
-					pf, _, _, _, _ := selectCameraMode(m.videoDev, m.conf, a.w, a.h, a.fps)
+					pf := ""
+					if m.ipSource == "" {
+						pf, _, _, _, _ = selectCameraMode(m.videoDev, m.conf, a.w, a.h, a.fps)
+					} else {
+						pf = strings.ToUpper(m.ipSource) // "RTSP" or "HTTP_MJPEG"
+					}
 					m.mu.Lock()
 					m.lastAttempt = a
 					m.lastPixFmt = pf
@@ -748,6 +797,12 @@ func (m *Manager) buildPipelineForAttempt(roomID int64, a videoAttempt, includeA
 }
 
 func (m *Manager) buildPipelineFromConfig(roomID int64, conf *cfg.AgentConfig, includeAudio bool) string {
+	// ── IP camera source (RTSP / HTTP-MJPEG) ─────────────────────────────────
+	if m.ipSource == cfg.CameraSourceRTSP || m.ipSource == cfg.CameraSourceHTTPMJPEG {
+		return m.buildIPSourcePipeline(roomID, conf, includeAudio)
+	}
+
+	// ── USB / V4L2 (original path) ────────────────────────────────────────────
 	videoDev := defaultIfEmpty(m.videoDev, "/dev/video0")
 
 	width, height, fpsNum, fpsDen := pickVideoParamsFromConfig(conf)
@@ -1013,6 +1068,175 @@ func keyIntForFps(fpsNum, fpsDen int) int {
 }
 
 // buildVideoSrc builds the camera capture portion.
+
+// buildIPSourcePipeline builds a gst-launch pipeline string for RTSP or
+// HTTP-MJPEG IP camera sources (ESP32-CAM, Pi cameras via mediamtx, etc.).
+//
+// The pipeline topology for RTSP (H.264 passthrough, most common):
+//
+//	rtspsrc → rtph264depay → h264parse → decodebin → videoconvert/scale/rate → (encode) → janusvrwebrtcsink
+//
+// For HTTP-MJPEG:
+//
+//	souphttpsrc → multipartdemux → jpegdec → videoconvert/scale/rate → (encode) → janusvrwebrtcsink
+//
+// Resolution/fps caps are applied as hints after decode; the actual capture
+// resolution is whatever the remote end sends.
+func (m *Manager) buildIPSourcePipeline(roomID int64, conf *cfg.AgentConfig, includeAudio bool) string {
+	width, height, fpsNum, _ := pickVideoParamsFromConfig(conf)
+
+	janusURL := conf.JanusURL
+	displayName := sanitizeDisplay(conf.MavID)
+	if displayName == "" {
+		displayName = "vehicle"
+	}
+
+	ju := gstQuote(janusURL)
+	dn := gstQuote(displayName)
+
+	m.mu.Lock()
+	ice := m.ice
+	m.mu.Unlock()
+	iceProps := buildJanusSinkICEProps(ice)
+
+	videoCapsProp := `video-caps="video/x-vp8"`
+	if strings.EqualFold(conf.VideoCodec, "h264") {
+		videoCapsProp = `video-caps="video/x-h264"`
+	}
+
+	ccProp := "congestion-control=gcc"
+	if strings.EqualFold(conf.VideoCodec, "h264") && strings.EqualFold(conf.H264Encoder, "v4l2h264enc") {
+		ccProp = "congestion-control=disabled"
+	}
+
+	brProps := fmt.Sprintf("start-bitrate=%d min-bitrate=%d max-bitrate=%d",
+		conf.WebRTCStartBitrateBps, conf.WebRTCMinBitrateBps, conf.WebRTCMaxBitrateBps)
+	if strings.EqualFold(conf.VideoCodec, "h264") && strings.EqualFold(conf.H264Encoder, "v4l2h264enc") {
+		brProps = ""
+	}
+
+	su := gstQuote(m.ipURL)
+
+	var videoSrc string
+	switch m.ipSource {
+	case cfg.CameraSourceHTTPMJPEG:
+		// souphttpsrc + multipartdemux for ESP32-CAM /stream endpoint style MJPEG.
+		bufMs := m.ipBufferMs // 0 = no extra buffer for HTTP-MJPEG (low latency)
+		bufProp := ""
+		if bufMs > 0 {
+			bufProp = fmt.Sprintf(" blocksize=%d", bufMs*1024) // rough byte budget
+		}
+		_ = bufProp
+		videoSrc = fmt.Sprintf(
+			"souphttpsrc location=%s is-live=true ! "+
+				"multipartdemux ! image/jpeg ! "+
+				"jpegdec ! videoconvert ! videoscale ! videorate ! "+
+				"video/x-raw,width=%d,height=%d,framerate=%d/1 ! ",
+			su, width, height, fpsNum,
+		)
+		m.logf("[stream][ip] HTTP-MJPEG source url=%s %dx%d@%d", m.ipURL, width, height, fpsNum)
+
+	default: // cfg.CameraSourceRTSP
+		transport := strings.TrimSpace(m.ipTransport)
+		if transport == "" || strings.EqualFold(transport, "auto") {
+			transport = "tcp+udp+udp-mcast+http+tls"
+		}
+		bufMs := m.ipBufferMs
+		if bufMs <= 0 {
+			bufMs = 200 // safe default for Wi-Fi cameras
+		}
+		latencyProp := fmt.Sprintf("latency=%d", bufMs)
+		transportQ := gstQuote(transport)
+
+		// Try to detect if the stream is H.264 (the ESP32-CAM default) and use
+		// a direct passthrough parse path to avoid a full software decode+re-encode
+		// cycle. If the stream turns out to be something else, decodebin handles it.
+		//
+		// We always go through decodebin for robustness; rtph264depay+h264parse is
+		// inside decodebin's caps negotiation. The explicit parse branch below is
+		// used for H.264 passthrough when the WebRTC codec is also H.264 to avoid
+		// transcode latency.
+		if strings.EqualFold(conf.VideoCodec, "h264") {
+			// H.264 passthrough: depay → parse → scale/rate (no decode/re-encode)
+			videoSrc = fmt.Sprintf(
+				"rtspsrc location=%s protocols=%s %s ! "+
+					"rtph264depay ! h264parse ! "+
+					"video/x-h264,width=%d,height=%d,framerate=%d/1 ! ",
+				su, transportQ, latencyProp,
+				width, height, fpsNum,
+			)
+			m.logf("[stream][ip] RTSP H.264 passthrough url=%s transport=%s buf=%dms %dx%d@%d",
+				m.ipURL, transport, bufMs, width, height, fpsNum)
+		} else {
+			// VP8 / other: decode then re-encode
+			videoSrc = fmt.Sprintf(
+				"rtspsrc location=%s protocols=%s %s ! "+
+					"decodebin ! videoconvert ! videoscale ! videorate ! "+
+					"video/x-raw,width=%d,height=%d,framerate=%d/1 ! ",
+				su, transportQ, latencyProp,
+				width, height, fpsNum,
+			)
+			m.logf("[stream][ip] RTSP→VP8 url=%s transport=%s buf=%dms %dx%d@%d",
+				m.ipURL, transport, bufMs, width, height, fpsNum)
+		}
+	}
+
+	// Encode the decoded/raw video to the target WebRTC codec.
+	var encChain string
+	switch strings.ToLower(strings.TrimSpace(conf.VideoCodec)) {
+	case "h264":
+		enc := strings.ToLower(strings.TrimSpace(conf.H264Encoder))
+		if enc == "auto" || enc == "" {
+			if gstElementExists("openh264enc") {
+				enc = "openh264enc"
+			} else if gstElementExists("x264enc") {
+				enc = "x264enc"
+			} else {
+				enc = "openh264enc"
+			}
+		}
+		if strings.EqualFold(enc, "v4l2h264enc") {
+			// Pi hw encoder
+			encChain = fmt.Sprintf(
+				"v4l2h264enc extra-controls=\"controls,repeat_sequence_header=1\" ! "+
+					"video/x-h264,level=(string)4 ! h264parse ! ",
+			)
+		} else if strings.EqualFold(enc, "openh264enc") {
+			encChain = fmt.Sprintf(
+				"openh264enc bitrate=%d ! h264parse ! ",
+				conf.H264BitrateBps,
+			)
+		} else {
+			// x264enc or similar
+			encChain = fmt.Sprintf(
+				"x264enc tune=zerolatency bitrate=%d ! h264parse ! ",
+				conf.H264BitrateBps/1000,
+			)
+		}
+		// If we already have H.264 passthrough from RTSP→H.264, skip re-encode.
+		if m.ipSource == cfg.CameraSourceRTSP && strings.EqualFold(conf.VideoCodec, "h264") {
+			// passthrough: source already ends with h264 caps; just wire to sink
+			encChain = ""
+		}
+	default:
+		// VP8
+		encChain = fmt.Sprintf(
+			"vp8enc deadline=1 target-bitrate=%d ! ",
+			conf.H264BitrateBps,
+		)
+	}
+
+	pipeline := fmt.Sprintf(
+		"janusvrwebrtcsink name=sink %s %s %s "+
+			"signaller::janus-endpoint=%s signaller::room-id=%d signaller::display-name=%s "+
+			"%s %s%s",
+		videoCapsProp, ccProp, brProps,
+		ju, roomID, dn,
+		iceProps,
+		videoSrc, encChain,
+	)
+	return strings.TrimSpace(pipeline)
+}
 
 func buildVideoSrc(videoDev string, pixFmt string, width, height, fpsNum, fpsDen int, preferMJPG bool) string {
 	pix := strings.ToUpper(strings.TrimSpace(pixFmt))

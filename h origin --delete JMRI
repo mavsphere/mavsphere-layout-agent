@@ -1,0 +1,357 @@
+[1mdiff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml[m
+[1mdeleted file mode 100644[m
+[1mindex bc54619..0000000[m
+[1m--- a/.github/workflows/ci.yml[m
+[1m+++ /dev/null[m
+[36m@@ -1,37 +0,0 @@[m
+[31m-name: CI[m
+[31m-[m
+[31m-on:[m
+[31m-  push:[m
+[31m-    branches: [ main ][m
+[31m-  pull_request:[m
+[31m-    branches: [ main ][m
+[31m-[m
+[31m-jobs:[m
+[31m-  build:[m
+[31m-    name: Build & Vet[m
+[31m-    runs-on: ubuntu-latest[m
+[31m-[m
+[31m-    steps:[m
+[31m-      - name: Checkout[m
+[31m-        uses: actions/checkout@v4[m
+[31m-[m
+[31m-      - name: Set up Go[m
+[31m-        uses: actions/setup-go@v5[m
+[31m-        with:[m
+[31m-          go-version: '1.22'[m
+[31m-          cache: true[m
+[31m-[m
+[31m-      - name: Build[m
+[31m-        run: go build ./...[m
+[31m-[m
+[31m-      - name: Vet[m
+[31m-        run: go vet ./...[m
+[31m-[m
+[31m-      - name: Check formatting[m
+[31m-        run: |[m
+[31m-          unformatted=$(gofmt -l .)[m
+[31m-          if [ -n "$unformatted" ]; then[m
+[31m-            echo "The following files are not gofmt formatted:"[m
+[31m-            echo "$unformatted"[m
+[31m-            exit 1[m
+[31m-          fi[m
+[1mdiff --git a/.github/workflows/docker-publish.yml b/.github/workflows/docker-publish.yml[m
+[1mdeleted file mode 100644[m
+[1mindex 6664d94..0000000[m
+[1m--- a/.github/workflows/docker-publish.yml[m
+[1m+++ /dev/null[m
+[36m@@ -1,112 +0,0 @@[m
+[31m-name: Build & Push Layout Agent[m
+[31m-[m
+[31m-on:[m
+[31m-  push:[m
+[31m-    branches: [ main ][m
+[31m-  workflow_dispatch:[m
+[31m-    inputs:[m
+[31m-      image_tag:[m
+[31m-        description: 'Optional friendly tag prefix. Leave blank to derive from branch name + commit hash.'[m
+[31m-        required: false[m
+[31m-        default: ''[m
+[31m-      push_latest:[m
+[31m-        description: 'Also push the :latest tag. Use false for feature testing.'[m
+[31m-        required: true[m
+[31m-        default: 'false'[m
+[31m-        type: choice[m
+[31m-        options:[m
+[31m-          - 'false'[m
+[31m-          - 'true'[m
+[31m-[m
+[31m-permissions:[m
+[31m-  contents: read[m
+[31m-  packages: write[m
+[31m-[m
+[31m-jobs:[m
+[31m-  docker:[m
+[31m-    name: Build & Push[m
+[31m-    runs-on: ubuntu-latest[m
+[31m-    steps:[m
+[31m-      - name: Checkout[m
+[31m-        uses: actions/checkout@v4[m
+[31m-[m
+[31m-      - name: Compute build metadata[m
+[31m-        id: meta[m
+[31m-        shell: bash[m
+[31m-        run: |[m
+[31m-          set -euo pipefail[m
+[31m-[m
+[31m-          SHORT_SHA="${GITHUB_SHA::7}"[m
+[31m-[m
+[31m-          RAW_REF="${GITHUB_REF_NAME}"[m
+[31m-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.image_tag }}" ]; then[m
+[31m-            RAW_REF="${{ inputs.image_tag }}"[m
+[31m-          fi[m
+[31m-[m
+[31m-          SAFE_REF="$(echo "${RAW_REF}" | tr '/:@ ' '----' | tr -cd 'A-Za-z0-9_.-')"[m
+[31m-          if [ -z "${SAFE_REF}" ]; then[m
+[31m-            SAFE_REF="manual"[m
+[31m-          fi[m
+[31m-[m
+[31m-          echo "SHA=${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"[m
+[31m-          echo "SHORT_SHA=${SHORT_SHA}" >> "${GITHUB_OUTPUT}"[m
+[31m-          echo "REF_NAME=${SAFE_REF}" >> "${GITHUB_OUTPUT}"[m
+[31m-          echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"[m
+[31m-[m
+[31m-      - name: Compute Docker tags[m
+[31m-        id: tags[m
+[31m-        shell: bash[m
+[31m-        run: |[m
+[31m-          set -euo pipefail[m
+[31m-[m
+[31m-          IMAGE="ghcr.io/mavsphere/layout-agent"[m
+[31m-          TAGS="${IMAGE}:${{ steps.meta.outputs.REF_NAME }}-${{ steps.meta.outputs.SHORT_SHA }}"[m
+[31m-          TAGS="${TAGS}"$'\n'"${IMAGE}:sha-${{ steps.meta.outputs.SHA }}"[m
+[31m-[m
+[31m-          if [ "${{ github.event_name }}" != "workflow_dispatch" ] || [ "${{ inputs.push_latest }}" = "true" ]; then[m
+[31m-            TAGS="${IMAGE}:latest"$'\n'"${TAGS}"[m
+[31m-          fi[m
+[31m-[m
+[31m-          {[m
+[31m-            echo "tags<<EOF"[m
+[31m-            echo "${TAGS}"[m
+[31m-            echo "EOF"[m
+[31m-          } >> "${GITHUB_OUTPUT}"[m
+[31m-[m
+[31m-          echo "Docker tags:"[m
+[31m-          echo "${TAGS}"[m
+[31m-[m
+[31m-      - name: Set up QEMU[m
+[31m-        uses: docker/setup-qemu-action@v3[m
+[31m-[m
+[31m-      - name: Set up Buildx[m
+[31m-        uses: docker/setup-buildx-action@v3[m
+[31m-[m
+[31m-      - name: Login to GHCR[m
+[31m-        uses: docker/login-action@v3[m
+[31m-        with:[m
+[31m-          registry: ghcr.io[m
+[31m-          username: ${{ github.actor }}[m
+[31m-          password: ${{ secrets.GITHUB_TOKEN }}[m
+[31m-[m
+[31m-      - name: Build & Push Layout Agent[m
+[31m-        uses: docker/build-push-action@v6[m
+[31m-        with:[m
+[31m-          context: .[m
+[31m-          file: ./Dockerfile[m
+[31m-          platforms: linux/amd64,linux/arm64[m
+[31m-          push: true[m
+[31m-          tags: ${{ steps.tags.outputs.tags }}[m
+[31m-          labels: |[m
+[31m-            org.opencontainers.image.source=https://github.com/mavsphere/mavsphere-layout-agent[m
+[31m-            org.opencontainers.image.revision=${{ steps.meta.outputs.SHA }}[m
+[31m-            org.opencontainers.image.version=${{ steps.meta.outputs.REF_NAME }}[m
+[31m-            org.opencontainers.image.created=${{ steps.meta.outputs.BUILD_DATE }}[m
+[31m-          build-args: |[m
+[31m-            BASE_IMAGE=ghcr.io/mavsphere/layout-agent-base:latest[m
+[31m-            BUILD_SHA=${{ steps.meta.outputs.SHA }}[m
+[31m-            BUILD_REF=${{ steps.meta.outputs.REF_NAME }}[m
+[31m-            BUILD_DATE=${{ steps.meta.outputs.BUILD_DATE }}[m
+[31m-            BUILD_REPO=mavsphere/mavsphere-layout-agent[m
+[31m-          cache-from: type=gha[m
+[31m-          cache-to: type=gha,mode=max[m
+[1mdiff --git a/deploy/config-agent/config.template.json b/deploy/config-agent/config.template.json[m
+[1mindex 0104141..2e4a4c0 100644[m
+[1m--- a/deploy/config-agent/config.template.json[m
+[1m+++ b/deploy/config-agent/config.template.json[m
+[36m@@ -1,110 +1,30 @@[m
+ {[m
+[31m-  "_comment": "Copy this to config.json and fill in your values. Remove all _comment fields.",[m
+[31m-[m
+[31m-  "layoutId":     "1",[m
+[31m-  "backendUrl":   "https://mavsphere.com",[m
+[32m+[m[32m  "layoutId": "REPLACE_ME",[m
+[32m+[m[32m  "backendUrl": "https://mavsphere.com",[m
+   "backendWsUrl": "wss://mavsphere.com/api/ws/agent",[m
+[31m-  "username":     "your@email.com",[m
+[31m-  "password":     "yourpassword",[m
+[31m-[m
+[32m+[m[32m  "username": "YOUR_EMAIL",[m
+[32m+[m[32m  "password": "YOUR_PASSWORD",[m
+   "dccEx": {[m
+[31m-    "_comment": "Serial path (/dev/ttyUSB0, /dev/ttyACM0) or TCP address (192.168.1.100:2560)",[m
+[31m-    "port":             "/dev/ttyUSB0",[m
+[31m-    "baudRate":         115200,[m
+[32m+[m[32m    "port": "/dev/ttyUSB0",[m
+[32m+[m[32m    "baudRate": 115200,[m
+     "commandTimeoutMs": 3000[m
+   },[m
+[31m-[m
+   "mqtt": {[m
+[31m-    "_comment": "Use tcp://mosquitto:1883 when running via Docker Compose. Use tcp://localhost:1883 when running standalone.",[m
+[31m-    "brokerUrl":   "tcp://mosquitto:1883",[m
+[32m+[m[32m    "brokerUrl": "tcp://mosquitto:1883",[m
+     "topicPrefix": "layout"[m
+   },[m
+[31m-[m
+[31m-  "janusUrl": "wss://mavsphere.com/janus",[m
+[31m-[m
+[31m-  "_comment_video": [[m
+[31m-    "VIDEO CODEC",[m
+[31m-    "  videoCodec: 'h264' is strongly recommended over 'vp8'.",[m
+[31m-    "    h264  — Use this. Better quality at same bitrate, hardware decode on all browsers/devices.",[m
+[31m-    "    vp8   — Software only, higher CPU, lower quality. Only fall back here if h264 fails.",[m
+[31m-    "    auto  — Tries h264 first, falls back to vp8. Good option if unsure.",[m
+[31m-    "",[m
+[31m-    "H.264 ENCODER (only used when videoCodec is 'h264' or 'auto')",[m
+[31m-    "  h264Encoder:",[m
+[31m-    "    auto        — Recommended. Agent probes at runtime: uses v4l2h264enc (Pi HW) if",[m
+[31m-    "                  available, otherwise falls back to x264enc (software). Best default.",[m
+[31m-    "    v4l2h264enc — Force Pi hardware encoder. Use only on Raspberry Pi.",[m
+[31m-    "                  Disables GCC congestion control (HW encoder can't be mid-stream adjusted).",[m
+[31m-    "    x264enc     — Force software encoder. Correct choice for Ubuntu/PC desktop.",[m
+[31m-    "                  GCC congestion control remains active — bitrate adapts to network.",[m
+[31m-    "",[m
+[31m-    "H.264 PROFILE",[m
+[31m-    "  h264Profile: determines which decoder features are required on the viewer's device.",[m
+[31m-    "    constrained-baseline — BEST CHOICE for max compatibility (all browsers, mobile, set-top).",[m
+[31m-    "                           Same as what Teams, Zoom, and Meet default to.",[m
+[31m-    "    baseline             — Broadly compatible, slightly looser than constrained-baseline.",[m
+[31m-    "    main                 — Better compression but some older mobile decoders may struggle.",[m
+[31m-    "    high                 — Best compression, modern browsers/desktop only.",[m
+[31m-    "",[m
+[31m-    "BITRATE SETTINGS",[m
+[31m-    "  h264BitrateBps: the target encode bitrate passed to the GStreamer encoder element.",[m
+[31m-    "    Pi (v4l2h264enc)     : 1500000–2000000 (1.5–2 Mbps). HW encoder ceiling is ~4 Mbps.",[m
+[31m-    "    PC x264enc           : 2000000–4000000 (2–4 Mbps). No real ceiling on modern hardware.",[m
+[31m-    "    Note: for x264enc this value is divided by 1000 and passed as kbps to GStreamer.",[m
+[31m-    "",[m
+[31m-    "  webrtcMaxBitrateBps: ceiling for the janusvrwebrtcsink GCC congestion controller.",[m
+[31m-    "    Should be >= h264BitrateBps. GCC won't go above this even on perfect links.",[m
+[31m-    "    Set equal to h264BitrateBps unless you want GCC to probe beyond the encoder target.",[m
+[31m-    "",[m
+[31m-    "  webrtcStartBitrateBps: initial bitrate GCC probes from on connection.",[m
+[31m-    "    ~50% of max is a good starting point. Too low = slow ramp-up on good links.",[m
+[31m-    "    Too high = burst of packet loss on first connect.",[m
+[31m-    "",[m
+[31m-    "  webrtcMinBitrateBps: floor GCC won't drop below. 150000–300000 is sensible.",[m
+[31m-    "    Prevents the stream from becoming unwatchable on very poor links; if bandwidth",[m
+[31m-    "    genuinely can't support this floor the stream will stall/recover rather than degrade.",[m
+[31m-    "",[m
+[31m-    "RECOMMENDED PRESETS",[m
+[31m-    "  Pi (Raspberry Pi 4/5, v4l2h264enc):",[m
+[31m-    "    videoCodec: 'h264', h264Encoder: 'v4l2h264enc', h264Profile: 'constrained-baseline'",[m
+[31m-    "    h264BitrateBps: 1500000, webrtcMaxBitrateBps: 1500000,",[m
+[31m-    "    webrtcStartBitrateBps: 750000, webrtcMinBitrateBps: 150000",[m
+[31m-    "",[m
+[31m-    "  PC / Ubuntu desktop (x264enc, software):",[m
+[31m-    "    videoCodec: 'h264', h264Encoder: 'auto', h264Profile: 'constrained-baseline'",[m
+[31m-    "    h264BitrateBps: 3000000, webrtcMaxBitrateBps: 3000000,",[m
+[31m-    "    webrtcStartBitrateBps: 1500000, webrtcMinBitrateBps: 300000",[m
+[31m-    "",[m
+[31m-    "  PC with NVIDIA GPU (nvh264enc — requires gst-plugins-bad with NVENC):",[m
+[31m-    "    videoCodec: 'h264', h264Encoder: 'auto', h264Profile: 'constrained-baseline'",[m
+[31m-    "    h264BitrateBps: 4000000, webrtcMaxBitrateBps: 4000000,",[m
+[31m-    "    webrtcStartBitrateBps: 2000000, webrtcMinBitrateBps: 300000",[m
+[31m-    "    (nvh264enc is not yet a selectable option in the agent — use x264enc for now)"[m
+[31m-  ],[m
+[31m-[m
+[31m-  "videoCodec":   "h264",[m
+[31m-  "h264Encoder":  "auto",[m
+[31m-  "h264Profile":  "constrained-baseline",[m
+[31m-[m
+[31m-  "h264BitrateBps":        3000000,[m
+[31m-  "webrtcStartBitrateBps": 1500000,[m
+[31m-  "webrtcMaxBitrateBps":   3000000,[m
+[31m-  "webrtcMinBitrateBps":   300000,[m
+[31m-[m
+[31m-  "_comment_res": [[m
+[31m-    "RESOLUTION / FPS / CAPTURE FORMAT",[m
+[31m-    "  videoWidth / videoHeight: requested capture resolution. Agent snaps to nearest",[m
+[31m-    "    mode the camera actually supports. Check agent logs for '[video] selected camera mode'",[m
+[31m-    "    to see what was actually negotiated.",[m
+[31m-    "  videoFps: requested frame rate. 25–30 is normal. Pi HW encoder caps at 30.",[m
+[31m-    "  preferMjpg: true = prefer MJPG camera capture mode (higher FPS on most USB cams).",[m
+[31m-    "    Set false only if you see 'device busy' errors on startup."[m
+[31m-  ],[m
+[31m-  "videoWidth":   1280,[m
+[31m-  "videoHeight":  720,[m
+[31m-  "videoFps":     30,[m
+[31m-  "preferMjpg":   true,[m
+[31m-[m
+[32m+[m[32m  "janusUrl": "ws://192.168.68.65:8188/janus",[m
+[32m+[m[32m  "videoCodec": "vp8",[m
+[32m+[m[32m  "h264Encoder": "auto",[m
+[32m+[m[32m  "h264Profile": "baseline",[m
+[32m+[m[32m  "h264BitrateBps": 1500000,[m
+[32m+[m[32m  "preferMjpg": true,[m
+[32m+[m[32m  "videoWidth": 1280,[m
+[32m+[m[32m  "videoHeight": 720,[m
+[32m+[m[32m  "videoFps": 25,[m
+[32m+[m[32m  "webrtcStartBitrateBps": 800000,[m
+[32m+[m[32m  "webrtcMaxBitrateBps": 1500000,[m
+[32m+[m[32m  "webrtcMinBitrateBps": 150000,[m
+   "cameras": [[m
+     {[m
+       "cameraId": "main",[m
+[36m@@ -121,11 +41,10 @@[m
+       "trainSlug": ""[m
+     }[m
+   ],[m
+[31m-[m
+[32m+[m[32m  "trains": null,[m
+   "allowControl": true,[m
+[31m-[m
+   "failsafe": {[m
+[31m-    "controlTimeoutMs": 450,[m
+[31m-    "reissueStopMs":    500[m
+[32m+[m[32m    "controlTimeoutMs": 2000,[m
+[32m+[m[32m    "reissueStopMs": 1000[m
+   }[m
+ }[m
+\ No newline at end of file[m
+[1mdiff --git a/deploy/config-simulator/old/config.json b/deploy/config-simulator/old/config.json[m
+[1mdeleted file mode 100644[m
+[1mindex 3a55b20..0000000[m
+[1m--- a/deploy/config-simulator/old/config.json[m
+[1m+++ /dev/null[m
+[36m@@ -1,15 +0,0 @@[m
+[31m-{[m
+[31m-  "layoutId": "2",[m
+[31m-  "agentUrl": "http://192.168.68.65:8091",[m
+[31m-  "mqtt": {[m
+[31m-    "brokerUrl": "tcp://mosquitto:1883",[m
+[31m-    "topicPrefix": "layout"[m
+[31m-  },[m
+[31m-  "dccEx": {[m
+[31m-    "listenAddr": "0.0.0.0:2560"[m
+[31m-  },[m
+[31m-  "simNodeId": "sim-node-01",[m
+[31m-  "physicsTickMs": 100,[m
+[31m-  "routePollMs": 500,[m
+[31m-  "defaultBlockLengthMm": 500[m
+[31m-}[m
+[1mdiff --git a/deploy/docker-compose.sim.yml b/deploy/docker-compose.sim.yml[m
+[1mindex 82f05cf..0edb69d 100644[m
+[1m--- a/deploy/docker-compose.sim.yml[m
+[1m+++ b/deploy/docker-compose.sim.yml[m
+[36m@@ -1,6 +1,6 @@[m
+ services:[m
+   simulator:[m
+[31m-    image: ghcr.io/mavsphere/layout-simulator:latest[m
+[32m+[m[32m    image: mavsphere/layout-simulator:latest[m
+     restart: unless-stopped[m
+     depends_on:[m
+       mosquitto:[m
+[1mdiff --git a/deploy/docker-compose.yml b/deploy/docker-compose.yml[m
+[1mindex 0174154..ad1df27 100644[m
+[1m--- a/deploy/docker-compose.yml[m
+[1m+++ b/deploy/docker-compose.yml[m
+[36m@@ -35,7 +35,7 @@[m [mservices:[m
+   layout-agent:[m
+     network_mode: host[m
+     privileged: true[m
+[31m-    image: ghcr.io/mavsphere/layout-agent:latest[m
+[32m+[m[32m    image: mavsphere/layout-agent:latest[m
+     restart: unless-stopped[m
+     depends_on:[m
+       mosquitto:[m
