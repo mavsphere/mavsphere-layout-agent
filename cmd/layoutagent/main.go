@@ -25,6 +25,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -40,6 +41,7 @@ import (
 	"github.com/mavsphere/mavsphere-layout-agent/internal/webui"
 	"github.com/mavsphere/mavsphere-layout-agent/pkg/auth"
 	"github.com/mavsphere/mavsphere-layout-agent/pkg/config"
+	"github.com/mavsphere/mavsphere-layout-agent/pkg/device"
 	agentmedia "github.com/mavsphere/mavsphere-layout-agent/pkg/media"
 )
 
@@ -95,17 +97,36 @@ func main() {
 	if err != nil {
 		logger.Fatalf("load config: %v", err)
 	}
-	logger.Printf("Starting layout agent for layoutId=%s", cfg.LayoutID)
-	logger.Printf("DCC-EX: %s | MQTT: %s | Backend: %s", cfg.DccEx.Port, cfg.Mqtt.BrokerURL, cfg.BackendWsURL)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// ── Web UI ─────────────────────────────────────────────────────────────────
+	// ── Web UI — started before pairing so the pairing code is visible ────────
 	var uiServer *webui.Server
 	if *uiAddr != "" {
 		uiServer = webui.Start(*uiAddr, *cfgPath)
 	}
+
+	// ── Pairing — must run before any other startup ──────────────────────────
+	// If the agent has no agentToken, it enters pairing mode: generates a
+	// 6-char code, polls the backend, and waits for the operator to confirm
+	// in the MavSphere UI. Once paired, config.json is updated and the agent
+	// continues with normal startup.
+	if cfg.AgentToken == "" {
+		logger.Printf("No agent token in config — entering pairing mode")
+		if err := auth.RunPairingLoop(ctx, *cfgPath); err != nil {
+			logger.Fatalf("Pairing failed or was cancelled: %v", err)
+		}
+		// Reload config after pairing writes token + layoutId.
+		cfg, err = config.Load(*cfgPath)
+		if err != nil {
+			logger.Fatalf("reload config after pairing: %v", err)
+		}
+	}
+
+	logger.Printf("Starting layout agent for layoutId=%s", cfg.LayoutID)
+	logger.Printf("DCC-EX: %s | MQTT: %s | Backend: %s", cfg.DccEx.Port, cfg.Mqtt.BrokerURL, cfg.BackendWsURL)
+
+	// ── Web UI started before pairing — see below ──────────────────────────
 
 	// ── Command station ───────────────────────────────────────────────────────
 	// Select DCC-EX or JMRI based on config. Both satisfy commandstation.CommandStation.
@@ -172,8 +193,36 @@ func main() {
 	// Started later (after tokenMu, doLogin, currentToken are declared).
 	// See "STOMP session" goroutines section below.
 
+	// ── Audio capture device ──────────────────────────────────────────────────
+	// Single ALSA capture device shared across all cameras (not per-camera).
+	// Auto-detected once at startup; override via config.AudioDevice, or set
+	// it to "none" to disable audio entirely. Resolved once here (like the
+	// command station and MQTT broker above) rather than per camera-start —
+	// changing it requires a restart, matching how VideoDevice works in the
+	// MAV agent.
+	audioDev, audioErr := device.DetectAudioDevice()
+	if audioErr != nil {
+		logger.Printf("ℹ️ Audio auto-detect failed: %v", audioErr)
+	}
+	if strings.TrimSpace(cfg.AudioDevice) != "" {
+		v := strings.ToLower(strings.TrimSpace(cfg.AudioDevice))
+		switch v {
+		case "none", "off", "disabled", "false":
+			audioDev = ""
+			logger.Printf("🎙️ Audio disabled via config (AudioDevice=%q)", cfg.AudioDevice)
+		default:
+			audioDev = strings.TrimSpace(cfg.AudioDevice)
+			logger.Printf("🎙️ Using audio device from config: %s", audioDev)
+		}
+	} else if audioDev != "" {
+		logger.Printf("🎙️ Audio device auto-detected: %s", audioDev)
+	} else {
+		audioDev = ""
+		logger.Printf("🎙️ No audio device detected; cameras will stream video-only")
+	}
+
 	// ── Camera manager ────────────────────────────────────────────────────────
-	camMgr := cammgr.NewCameraManager(cfg, logger)
+	camMgr := cammgr.NewCameraManager(cfg, audioDev, logger)
 
 	// ── Session reference (set after STOMP handlers are wired) ────────────────
 	var sessMu sync.RWMutex
@@ -307,9 +356,8 @@ func main() {
 
 	// ── Auth ───────────────────────────────────────────────────────────────────
 	// Retry logic:
-	//   - ErrBadCredentials (401/403): stop retrying entirely. Wrong credentials
-	//     will never succeed and hammering the endpoint locks the account for
-	//     legitimate users. Log clearly and wait for a config change + restart.
+	//   - ErrTokenRevoked: backend explicitly rejected the token. Clear it and
+	//     restart into pairing mode rather than retrying.
 	//   - ErrRateLimited (429): back off for the duration the backend specifies.
 	//   - Transient errors (network, 5xx): exponential backoff 5s → 10s → 20s → 60s cap.
 	runState.Phase = "auth"
@@ -324,25 +372,15 @@ func main() {
 			break
 		}
 
-		if errors.Is(err, auth.ErrBadCredentials) {
-			// Wrong credentials — retrying will not help and will lock the account.
-			// Mark as degraded and park here until the container is restarted with
-			// corrected config.
-			runState.Degraded = true
-			runState.Reasons = append(runState.Reasons, "bad credentials — check username and password in config, then restart agent")
-			logger.Printf("AUTH FAILED — bad credentials. Fix username/password in config (http://<pi>:8091) and restart the agent. Not retrying.")
-			for {
-				time.Sleep(60 * time.Second)
-				// Re-check in case config was hot-updated via the web UI.
-				// config.Set() is called by the web UI on save, so config.Get()
-				// will reflect any change without a restart. If credentials change,
-				// exit so Docker restarts with fresh state.
-				newCfg := config.Get()
-				if newCfg.Username != cfg.Username || newCfg.Password != cfg.Password {
-					logger.Printf("[auth] credentials changed in config — restarting to apply")
-					os.Exit(0)
-				}
+		if errors.Is(err, auth.ErrTokenRevoked) {
+			// Backend explicitly rejected the token as invalid or revoked.
+			// Clear agentToken so the agent enters pairing mode on restart.
+			logger.Printf("[auth] agent token revoked — clearing token and restarting into pairing mode")
+			cfg.AgentToken = ""
+			if saveErr := config.Save(*cfgPath, cfg); saveErr != nil {
+				logger.Printf("[auth] failed to clear token from config: %v", saveErr)
 			}
+			os.Exit(0)
 		}
 
 		if errors.Is(err, auth.ErrRateLimited) {
@@ -378,7 +416,7 @@ func main() {
 	}
 	auth.SetToken(currentToken)
 	runState.LastAuth = time.Now()
-	logger.Printf("[auth] logged in as %s", cfg.Username)
+	logger.Printf("[auth] authenticated via agent token for layoutId=%s", cfg.LayoutID)
 
 	// ── Fetch train list from backend (source of truth) ───────────────────────
 	runState.Phase = "fetch-trains"

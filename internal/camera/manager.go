@@ -17,15 +17,23 @@ type CameraManager struct {
 	mu       sync.Mutex
 	managers map[string]*agentmedia.Manager // key: cameraSlug
 	logger   *log.Logger
+
+	// audioDevice is the single ALSA capture device (if any) shared across
+	// all cameras, resolved once at agent startup (auto-detected or set via
+	// config.AudioDevice). Whichever camera stream starts first claims it;
+	// the underlying GStreamer pipeline already falls back to video-only
+	// automatically if a second camera finds it busy.
+	audioDevice string
 }
 
-func NewCameraManager(_ *config.AgentConfig, logger *log.Logger) *CameraManager {
+func NewCameraManager(_ *config.AgentConfig, audioDevice string, logger *log.Logger) *CameraManager {
 	// The config pointer argument is intentionally unused: we always call
 	// config.Get() at the point of use so that resolution/codec changes saved
 	// via the web UI are reflected in new pipelines without a full restart.
 	return &CameraManager{
-		managers: make(map[string]*agentmedia.Manager),
-		logger:   logger,
+		managers:    make(map[string]*agentmedia.Manager),
+		logger:      logger,
+		audioDevice: audioDevice,
 	}
 }
 
@@ -71,7 +79,7 @@ func (m *CameraManager) StartCamera(ctx context.Context, cameraSlug string, room
 		mgr = agentmedia.NewIPSourceManager(&camCfg, cam.Source, cam.RTSPURL, cam.RTSPTransport, cam.BufferMs, m.logger)
 	default:
 		// USB / V4L2 (default)
-		mgr = agentmedia.NewManager(&camCfg, cam.Device, "", m.logger)
+		mgr = agentmedia.NewManager(&camCfg, cam.Device, m.audioDevice, m.logger)
 	}
 	mgr.SetICE(ctx, ice)
 

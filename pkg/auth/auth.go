@@ -1,3 +1,16 @@
+// Package auth handles backend authentication for the layout-agent.
+//
+// The agent authenticates using a pre-issued agent token (set via the
+// pairing flow into the agentToken field in config.json) by calling
+// POST /api/agent/token-login. No password is ever stored on the device.
+//
+// Error classification for 401 responses:
+//
+//	ErrTokenRevoked  — backend explicitly says token is invalid or revoked.
+//	                   Caller should clear the token and enter pairing mode.
+//	transient error  — 401 without explicit revocation body (e.g. clock skew,
+//	                   temporary auth service issue). Caller should retry with
+//	                   normal exponential backoff, not clear the token.
 package auth
 
 import (
@@ -8,18 +21,27 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mavsphere/mavsphere-layout-agent/pkg/config"
 )
 
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+// ── Request/response types ────────────────────────────────────────────────────
+
+type TokenLoginRequest struct {
+	AgentToken string `json:"agentToken"`
+	LayoutID   string `json:"layoutId"`
 }
 
 type LoginResponse struct {
 	Token string `json:"token"`
+}
+
+// tokenRejectResponse is the shape of a rejection body from /api/agent/token-login.
+type tokenRejectResponse struct {
+	// The backend returns a plain string message on rejection.
+	// We read raw text rather than a structured body.
 }
 
 // rateLimitResponse mirrors the backend's LoginRateLimitResponse DTO.
@@ -30,21 +52,20 @@ type rateLimitResponse struct {
 	BlockedBy         string `json:"blockedBy"` // "username" | "ip" | "both"
 }
 
-// ErrBadCredentials is returned when the server explicitly rejects the credentials
-// (HTTP 401 or 403). The agent should NOT retry automatically — this requires
-// the user to fix the config and restart. Retrying would hammer the login rate
-// limiter and lock the account for other users.
-var ErrBadCredentials = errors.New("bad credentials")
+// ── Sentinel errors ───────────────────────────────────────────────────────────
+
+// ErrTokenRevoked is returned when the backend explicitly rejects an agent token
+// as invalid or revoked (401 with a body containing "invalid" or "revoked").
+// The caller should clear the token from config and restart into pairing mode.
+var ErrTokenRevoked = errors.New("agent token revoked or invalid")
 
 // ErrRateLimited is returned when the server returns 429 (Too Many Requests).
-// Use AsRateLimit to extract the wait duration and reason.
 var ErrRateLimited = errors.New("rate limited")
 
-// RateLimitError carries the parsed backend rate-limit details so callers can
-// display an accurate countdown and decide whether to retry.
+// RateLimitError carries the parsed backend rate-limit details.
 type RateLimitError struct {
 	RetryAfter time.Duration
-	BlockedBy  string // "username" | "ip" | "both"
+	BlockedBy  string
 	Message    string
 }
 
@@ -53,9 +74,7 @@ func (e *RateLimitError) Error() string {
 		e.BlockedBy, e.RetryAfter.Round(time.Second), e.Message)
 }
 
-func (e *RateLimitError) Is(target error) bool {
-	return target == ErrRateLimited
-}
+func (e *RateLimitError) Is(target error) bool { return target == ErrRateLimited }
 
 // AsRateLimit extracts a *RateLimitError from err if one is present.
 func AsRateLimit(err error) (*RateLimitError, bool) {
@@ -66,15 +85,21 @@ func AsRateLimit(err error) (*RateLimitError, bool) {
 	return nil, false
 }
 
+// ── Login ─────────────────────────────────────────────────────────────────────
+
+// Login authenticates the layout-agent against the backend using its agent
+// token and returns a JWT.
 func Login() (string, error) {
 	cfg := config.Get()
-	loginURL := fmt.Sprintf("%s/api/auth/login", cfg.BackendURL)
+	return loginWithToken(cfg)
+}
 
-	log.Printf("[auth] attempting login as '%s' at %s", cfg.Username, loginURL)
+func loginWithToken(cfg *config.AgentConfig) (string, error) {
+	url := fmt.Sprintf("%s/api/agent/token-login", cfg.BackendURL)
 
-	reqBody := LoginRequest{
-		Username: cfg.Username,
-		Password: cfg.Password,
+	reqBody := TokenLoginRequest{
+		AgentToken: cfg.AgentToken,
+		LayoutID:   cfg.LayoutID,
 	}
 
 	data, err := json.Marshal(reqBody)
@@ -82,10 +107,12 @@ func Login() (string, error) {
 		return "", err
 	}
 
+	log.Printf("[auth] attempting token login for layout %s", cfg.LayoutID)
+
 	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Post(loginURL, "application/json", bytes.NewBuffer(data))
+	resp, err := client.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
-		log.Printf("[auth] login request failed: %v", err)
+		log.Printf("[auth] token login request failed: %v", err)
 		return "", err
 	}
 	defer resp.Body.Close()
@@ -94,40 +121,53 @@ func Login() (string, error) {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		// success — fall through
+		// fall through to parse JWT
 
-	case http.StatusUnauthorized, http.StatusForbidden:
-		// Wrong credentials — don't retry, don't hammer the rate limiter.
-		log.Printf("[auth] login rejected (HTTP %d) — check username and password in config", resp.StatusCode)
-		return "", ErrBadCredentials
+	case http.StatusUnauthorized:
+		// 401 — could be:
+		//   a) token explicitly revoked/invalid  → ErrTokenRevoked (clear + re-pair)
+		//   b) transient auth issue (clock skew) → return transient error (retry)
+		//
+		// Distinguish by inspecting the response body. The backend returns a plain
+		// string message like "Invalid or revoked agent token" on (a).
+		bodyStr := strings.ToLower(string(body))
+		if strings.Contains(bodyStr, "invalid") || strings.Contains(bodyStr, "revoked") {
+			log.Printf("[auth] token rejected as invalid/revoked by backend — token should be cleared")
+			return "", ErrTokenRevoked
+		}
+		// Transient — do not clear token, let the caller retry.
+		log.Printf("[auth] token login got 401 without revocation body (transient?) — will retry")
+		return "", fmt.Errorf("token login 401 (transient): %s", string(body))
+
+	case http.StatusForbidden:
+		// 403 — access denied (e.g. owner lost rail_host role). Treat as permanent.
+		log.Printf("[auth] token login 403 — access denied")
+		return "", ErrTokenRevoked
 
 	case http.StatusTooManyRequests:
 		rle := parseRateLimitBody(body, resp.Header.Get("Retry-After"))
-		log.Printf("[auth] %s", rle.Error())
+		log.Printf("[auth] token login rate limited: %v", rle)
 		return "", rle
 
 	default:
-		log.Printf("[auth] login failed: HTTP %d — %s", resp.StatusCode, string(body))
-		return "", fmt.Errorf("login failed HTTP %d: %s", resp.StatusCode, string(body))
+		log.Printf("[auth] token login failed: HTTP %d — %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("token login failed HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	var loginResp LoginResponse
 	if err := json.Unmarshal(body, &loginResp); err != nil {
-		log.Printf("[auth] login response parse error: %v", err)
+		log.Printf("[auth] token login response parse error: %v", err)
 		return "", err
 	}
-
 	if loginResp.Token == "" {
-		log.Printf("[auth] login succeeded but token was empty")
-		return "", errors.New("login returned empty token")
+		log.Printf("[auth] token login succeeded but JWT was empty")
+		return "", errors.New("token login returned empty JWT")
 	}
 
-	log.Printf("[auth] login succeeded for '%s'", cfg.Username)
+	log.Printf("[auth] token login succeeded for layout %s", cfg.LayoutID)
 	return loginResp.Token, nil
 }
 
-// parseRateLimitBody tries to extract a structured RateLimitError from the 429 body.
-// Falls back to a conservative 15-minute wait if the body cannot be parsed.
 func parseRateLimitBody(body []byte, retryAfterHeader string) *RateLimitError {
 	const fallbackWait = 15 * time.Minute
 
@@ -140,7 +180,6 @@ func parseRateLimitBody(body []byte, retryAfterHeader string) *RateLimitError {
 		}
 	}
 
-	// Try Retry-After header as fallback (RFC 7231 — integer seconds)
 	if retryAfterHeader != "" {
 		var secs int64
 		if _, err := fmt.Sscanf(retryAfterHeader, "%d", &secs); err == nil && secs > 0 {

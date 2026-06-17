@@ -134,7 +134,7 @@ fi
 header "Updating to latest release"
 info "Pulling latest image..."
 #docker pull ghcr.io/mavsphere/layout-agent:latest
-docker pull ghcr.io/mavsphere/layout-agent:ip-cam
+docker pull ghcr.io/mavsphere/layout-agent:latest
 
 # ── Stop existing containers ──────────────────────────────────────────────────
 info "Stopping existing containers..."

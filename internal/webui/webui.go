@@ -22,6 +22,7 @@ import (
 	gorillaws "github.com/gorilla/websocket"
 
 	"github.com/mavsphere/mavsphere-layout-agent/internal/jmriproxy"
+	"github.com/mavsphere/mavsphere-layout-agent/pkg/auth"
 	"github.com/mavsphere/mavsphere-layout-agent/pkg/config"
 	"github.com/mavsphere/mavsphere-layout-agent/pkg/device"
 )
@@ -308,7 +309,6 @@ func Start(addr, cfgPath string) *Server {
 			incoming.LayoutID = strings.TrimSpace(incoming.LayoutID)
 			incoming.BackendURL = strings.TrimSpace(incoming.BackendURL)
 			incoming.BackendWsURL = strings.TrimSpace(incoming.BackendWsURL)
-			incoming.Username = strings.TrimSpace(incoming.Username)
 			incoming.JanusURL = strings.TrimSpace(incoming.JanusURL)
 			incoming.VideoCodec = strings.TrimSpace(incoming.VideoCodec)
 			incoming.H264Encoder = strings.TrimSpace(incoming.H264Encoder)
@@ -371,6 +371,20 @@ func Start(addr, cfgPath string) *Server {
 			return
 		}
 		writeJSON(w, fn())
+	})
+
+	// ── /api/pair-code ───────────────────────────────────────────────────────
+	// Returns the current pairing code if the agent is in pairing mode.
+	// 200 + {"pairingCode": "ABC123"} when pairing needed.
+	// 200 + {"pairingCode": ""}        when already paired.
+	mux.HandleFunc("/api/pair-code", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		code := auth.GetPairingCode()
+		writeJSON(w, map[string]any{"pairingCode": code})
 	})
 
 	// ── /api/sessions ─────────────────────────────────────────────────────────

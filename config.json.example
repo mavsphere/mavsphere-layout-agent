@@ -4,8 +4,6 @@
   "layoutId":     "1",
   "backendUrl":   "https://mavsphere.com",
   "backendWsUrl": "wss://mavsphere.com/api/ws/agent",
-  "username":     "your@email.com",
-  "password":     "yourpassword",
 
   "dccEx": {
     "_comment": "Serial path (/dev/ttyUSB0, /dev/ttyACM0) or TCP address (192.168.1.100:2560)",

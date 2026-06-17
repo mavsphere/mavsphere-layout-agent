@@ -103,11 +103,16 @@ type MqttConfig struct {
 
 type AgentConfig struct {
 	// Identity + backend connection
-	LayoutID     string `json:"layoutId"`
+	// LayoutID is the backend layout this agent is paired to.
+	// Empty on first boot — filled automatically by the pairing flow.
+	LayoutID     string `json:"layoutId,omitempty"`
 	BackendWsURL string `json:"backendWsUrl"`
 	BackendURL   string `json:"backendUrl"`
-	Username     string `json:"username"`
-	Password     string `json:"password"`
+	// Auth: set AgentToken to a token from the MavSphere UI
+	// (Manage Layouts → Agent Tokens → Create), or leave empty and use the
+	// pairing flow, which fills this in automatically. No password is ever
+	// stored on device.
+	AgentToken string `json:"agentToken,omitempty"`
 
 	// Hardware
 	DccEx DccExConfig `json:"dccEx"`
@@ -129,6 +134,15 @@ type AgentConfig struct {
 	WebRTCStartBitrateBps int    `json:"webrtcStartBitrateBps"`
 	WebRTCMaxBitrateBps   int    `json:"webrtcMaxBitrateBps"`
 	WebRTCMinBitrateBps   int    `json:"webrtcMinBitrateBps"`
+
+	// Optional ALSA audio capture device override, e.g. "hw:1,0".
+	// If empty, the agent auto-detects the first ALSA capture device at
+	// startup. Use "none" to disable audio entirely. This is a single
+	// device shared across all cameras (not per-camera) — whichever camera
+	// stream starts first claims it; if a second camera tries to start while
+	// it's in use, the pipeline falls back to video-only automatically
+	// rather than failing.
+	AudioDevice string `json:"audioDevice,omitempty"`
 
 	MavID string `json:"-"`
 

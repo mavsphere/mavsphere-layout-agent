@@ -39,14 +39,68 @@
     .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .status-row { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 8px; }
     .status-item { display: flex; align-items: center; gap: 8px; }
+    /* ── Pairing banner ──────────────────────────────────────────────────── */
+    .pair-banner {
+      display: none;
+      margin-bottom: 20px;
+      padding: 24px;
+      background: linear-gradient(135deg, #0d2347 0%, #0a1a35 100%);
+      border: 2px solid #2e5aff;
+      border-radius: 16px;
+      text-align: center;
+    }
+    .pair-banner.visible { display: block; }
+    .pair-banner h2 { margin: 0 0 6px; font-size: 18px; color: #7faaff; border: none; padding: 0; }
+    .pair-banner p  { margin: 6px 0; color: #a9c0ff; font-size: 13px; line-height: 1.6; }
+    .pair-code-display {
+      display: inline-block;
+      margin: 16px 0;
+      padding: 14px 32px;
+      background: #060f1f;
+      border: 2px solid #2e5aff;
+      border-radius: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 42px;
+      font-weight: 700;
+      letter-spacing: 10px;
+      color: #ffffff;
+      user-select: all;
+      cursor: text;
+    }
+    .pair-steps {
+      margin: 14px auto 0;
+      max-width: 520px;
+      text-align: left;
+      font-size: 12px;
+      color: #8a9dbf;
+      line-height: 2;
+    }
+    .pair-steps li { margin-left: 16px; }
+    .pair-repair-btn {
+      margin-top: 12px;
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: 1px solid #2d4780;
+      background: #1a2b52;
+      color: #a9c0ff;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .pair-repaired-msg {
+      display: none;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #7cf58a;
+    }
+
 
     /* Trains / Cameras table */
     .list-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     .list-table th { text-align: left; font-size: 12px; color: #7a90c0; padding: 6px 8px; border-bottom: 1px solid #1f2b45; }
     .list-table td { padding: 6px 8px; border-bottom: 1px solid #161e35; vertical-align: top; }
-    /* Compact, aligned controls inside list tables.
-       Browser-native <select> elements are often taller than inputs unless
-       height/padding are forced, which made the camera Type column sit out of
+    /* Compact, aligned controls inside list tables (used by the read-only
+       Trains table). Browser-native <select> elements are often taller than
+       inputs unless height/padding are forced, which made columns sit out of
        alignment. */
     .list-table td input,
     .list-table td select {
@@ -72,6 +126,61 @@
     .list-table tr:last-child td { border-bottom: none; }
     .list-header { display: flex; align-items: center; justify-content: space-between; margin-top: 18px; margin-bottom: 4px; }
     .list-header h3 { margin: 0; }
+
+    /* Camera list: one card per camera instead of a single wide table.
+       A 9-column table inside an ~930px card left every dropdown too narrow
+       to show its own selected text, and got worse once "Check cameras"
+       added status text into an already-starved column. Cards give every
+       field (and the status line) the full card width to breathe. */
+    .camera-list { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+    .camera-card {
+      background: #0e1830;
+      border: 1px solid #1f2b45;
+      border-radius: 12px;
+      padding: 14px 16px 16px;
+    }
+    .camera-card .field { min-width: 0; }
+    .camera-card label {
+      display: block;
+      margin: 0 0 4px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      color: #7a90c0;
+    }
+    .camera-card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .camera-card-top .field-name { flex: 2 1 220px; }
+    .camera-card-top .field-type { flex: 1 1 130px; }
+    .camera-card-top .field-source { flex: 1 1 160px; }
+    .camera-card-top .field-remove { flex: 0 0 auto; margin-top: 18px; }
+    .camera-card-device { margin-top: 14px; }
+    .camera-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .camera-card-status-row {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #1a2640;
+      font-size: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: baseline;
+      flex-wrap: wrap;
+    }
+    .camera-card-status-row .status-tag {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+      color: #5a7098;
+    }
 
     .legal-banner {
       margin-top: 12px;
@@ -122,7 +231,47 @@
   <h1>MavSphere Layout Agent — Configuration</h1>
   <p class="muted">Edit settings and restart the agent. Changes take effect on restart.</p>
 
-  <div class="legal-banner" role="note">
+  
+  <!-- ── PAIRING BANNER ─────────────────────────────────────────────────── -->
+  <div id="pairBanner" class="pair-banner">
+    <h2>🔗 Agent not connected</h2>
+    <p>The agent is not connected to MavSphere. Pair it below to continue.</p>
+
+    <!-- Shown when pairing loop is not yet running -->
+    <div id="pairStartBtn">
+      <p style="font-size:13px;color:#a9c0ff;margin:12px 0 8px;">
+        To pair without entering credentials, click below. The agent will restart and display a pairing code.
+      </p>
+      <button onclick="startPairing()" style="padding:10px 24px;border-radius:8px;border:1px solid #2e5aff;background:#1a2b52;color:#7faaff;cursor:pointer;font-size:14px;font-weight:600;">
+        Start pairing
+      </button>
+    </div>
+
+    <!-- Shown when pairing loop is running and a code is available -->
+    <div id="pairCodeBlock" style="display:none;">
+      <p style="font-size:13px;color:#a9c0ff;margin:12px 0 4px;">Enter this code in MavSphere → Manage Layouts → Agent Tokens:</p>
+      <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">
+        <div class="pair-code-display" id="pairCodeDisplay">——————</div>
+        <button id="pairCodeCopyBtn" onclick="copyPairingCode()" title="Copy pairing code" style="padding:10px 16px;border-radius:8px;border:1px solid #2d4780;background:#1a2b52;color:#a9c0ff;cursor:pointer;font-size:13px;white-space:nowrap;">
+          📋 Copy
+        </button>
+      </div>
+      <p style="font-size:12px;color:#6a80ac;">Code expires after 5 minutes of inactivity.</p>
+      <ol class="pair-steps">
+        <li>In MavSphere, go to <strong>Manage Layouts → Agent Tokens</strong></li>
+        <li>Click <strong>Enter pairing code</strong></li>
+        <li>Type the code shown above and confirm</li>
+        <li>The agent will configure itself and reconnect automatically</li>
+      </ol>
+      <button onclick="triggerRepair()" style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid #2d4780;background:#1a2b52;color:#a9c0ff;cursor:pointer;font-size:13px;">
+        Generate new code
+      </button>
+    </div>
+
+    <p id="pairPairedMsg" style="display:none;margin-top:12px;font-size:13px;color:#7cf58a;">✓ Pairing confirmed — agent is configuring itself…</p>
+  </div>
+
+<div class="legal-banner" role="note">
     <strong>Operator notice:</strong>
     Use of this agent is subject to the MavSphere Terms of Service, Acceptable Use Policy, and any applicable Operator agreements.
     The local operator remains solely responsible for safe and lawful operation of all layout equipment at all times.
@@ -145,6 +294,11 @@
     <div class="status-item"><span class="pill" id="stCsLabel">Command Station</span> <span id="stCs" class="muted">—</span></div>
     <div class="status-item"><span class="pill">Heartbeat</span>     <span id="stHB"    class="muted">—</span></div>
     <div class="status-item"><span class="pill">Layout ID</span>     <span id="stLayout" class="muted">—</span></div>
+    <div class="status-item" id="stPairedItem" style="display:none">
+      <span class="pill">Paired</span>
+      <span id="stPaired" class="ok">✓ paired to layout <span id="stPairedId"></span></span>
+      <button id="btnUnpair" onclick="unpairAgent()" style="margin-left:8px;padding:3px 10px;border-radius:6px;border:1px solid #ff6b6b;background:transparent;color:#ff8b8b;cursor:pointer;font-size:11px;">Unpair</button>
+    </div>
     <div class="status-item" id="stPhaseItem" style="display:none"><span class="pill">Phase</span> <span id="stPhase" class="muted">—</span></div>
   </div>
 
@@ -196,16 +350,6 @@
       <div class="hint">e.g. <span class="kbd">wss://mavsphere.com/api/ws/agent</span></div>
     </div>
   </div>
-  <div class="row">
-    <div>
-      <label for="username">Username</label>
-      <input id="username" autocomplete="username" />
-    </div>
-    <div>
-      <label for="password">Password</label>
-      <input id="password" type="password" autocomplete="current-password" />
-    </div>
-  </div>
 
   <!-- DCC-EX & MQTT -->
   <h2>DCC-EX &amp; MQTT</h2>
@@ -226,6 +370,17 @@
     <span class="kbd">192.168.1.50:2560</span>. For MQTT, use your local broker URL such as
     <span class="kbd">tcp://localhost:1883</span>.
   </p>
+
+  <!-- AUDIO -->
+  <h2>Audio</h2>
+  <div class="row">
+    <div>
+      <label for="audioDevice">Audio device (ALSA)</label>
+      <input id="audioDevice" placeholder="auto (e.g. hw:1,0)" />
+      <div class="hint">Leave blank to auto-detect. Use <span class="kbd">none</span> to disable audio. Shared across all cameras — whichever stream starts first claims it.</div>
+    </div>
+    <div></div>
+  </div>
 
   <!-- JANUS / VIDEO -->
   <h2>Video (Janus WebRTC)</h2>
@@ -404,22 +559,9 @@
       <button class="small" id="btnAddCamera">+ Add camera</button>
     </div>
   </div>
-  <table class="list-table" id="camerasTable">
-    <thead>
-      <tr>
-        <th>Camera name</th>
-        <th>Type</th>
-        <th>Source</th>
-        <th>Device / URL</th>
-        <th>Resolution</th>
-        <th>FPS</th>
-        <th>Train (ONBOARD only)</th>
-        <th>Status</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody id="cameraRows"></tbody>
-  </table>
+  <div class="camera-list" id="camerasTable">
+    <div id="cameraRows"></div>
+  </div>
   <datalist id="trainSlugOptions"></datalist>
   <p id="noCameras" class="muted" style="display:none">No cameras configured.</p>
 
@@ -503,8 +645,10 @@
 
   <h3>Step 2 — Configure backend access</h3>
   <p class="muted">
-    Enter the backend HTTP URL, backend WebSocket URL, and your MavSphere login credentials.
-    The agent logs into the backend, fetches train and topology data, and subscribes to control messages.
+    Enter the backend HTTP URL and backend WebSocket URL, then pair the agent using the
+    pairing code banner at the top of this page (or via Manage Layouts &rarr; Agent Tokens
+    in MavSphere). The agent logs into the backend, fetches train and topology data, and
+    subscribes to control messages.
   </p>
 
   <h3>Step 3 — Configure DCC-EX</h3>
@@ -934,8 +1078,8 @@
 
 
   function renderCameras() {
-    const tbody = $('cameraRows');
-    tbody.innerHTML = '';
+    const container = $('cameraRows');
+    container.innerHTML = '';
     $('noCameras').style.display = cameras.length === 0 ? 'block' : 'none';
     const counts = cameraIdCounts();
     const globalSettings = currentVideoSettings();
@@ -947,31 +1091,30 @@
         `<option value="${t}" ${c.type === t ? 'selected' : ''}>${t}</option>`
       ).join('');
       const st = camStatuses[v.id];
-      let statusCell = '<span class="muted" style="font-size:12px">—</span>';
+      // Status now gets its own full-width row in the card, so messages can
+      // wrap instead of being squeezed (and truncated) into a narrow column.
+      let statusCell = '<span class="muted" style="font-size:12px">Not checked yet</span>';
       if (st) {
         if (!st.ok) {
-          statusCell = `<span class="err" style="font-size:12px" title="${esc(st.error || '')}">✗ ${esc((st.error || 'error').split(':').pop().trim().slice(0,40))}</span>`;
+          statusCell = `<span class="err" style="font-size:12px">✗ ${esc((st.error || 'error').split(':').pop().trim())}</span>`;
         } else {
           const stSource = st.source || 'usb';
           const isIPSt = stSource === 'rtsp' || stSource === 'http_mjpeg';
           if (isIPSt) {
             // IP camera: reachable confirmed by TCP probe, no caps expected
-            const hint = st.rtspUrl ? `Reachable: ${st.rtspUrl}` : 'Reachable';
-            statusCell = `<span class="ok" style="font-size:12px" title="${esc(hint)}">✓ Reachable</span>` +
-              `<br><span class="muted" style="font-size:11px">${stSource === 'http_mjpeg' ? 'HTTP MJPEG' : 'RTSP'}</span>`;
+            statusCell = `<span class="ok" style="font-size:12px">✓ Reachable</span>` +
+              `<span class="muted" style="font-size:11px">(${stSource === 'http_mjpeg' ? 'HTTP MJPEG' : 'RTSP'})</span>`;
           } else {
             const warnings = capsWarnings(st);
             if (warnings.length > 0) {
-              const tip = warnings.join('\n');
-              const short = warnings[0].slice(0, 38) + (warnings[0].length > 38 ? '…' : '');
-              statusCell = `<span class="warn" style="font-size:12px" title="${esc(tip)}">⚠ ${esc(short)}</span>` +
-                (warnings.length > 1 ? `<br><span class="muted" style="font-size:11px">(+${warnings.length - 1} more)</span>` : '');
+              statusCell = `<span class="warn" style="font-size:12px" title="${esc(warnings.join('\n'))}">⚠ ${esc(warnings[0])}</span>` +
+                (warnings.length > 1 ? `<span class="muted" style="font-size:11px">(+${warnings.length - 1} more — hover for full list)</span>` : '');
             } else {
               const modeSummary = st.caps && st.caps.modes
-                ? [...new Set(st.caps.modes.map(m => `${m.pixFmt} ${m.width}x${m.height}`))].slice(0,3).join(', ') + (st.caps.modes.length > 3 ? '…' : '')
+                ? [...new Set(st.caps.modes.map(m => `${m.pixFmt} ${m.width}x${m.height}`))].slice(0,4).join(', ') + (st.caps.modes.length > 4 ? '…' : '')
                 : '';
-              statusCell = `<span class="ok" style="font-size:12px" title="${esc(modeSummary)}">✓ OK</span>` +
-                (modeSummary ? `<br><span class="muted" style="font-size:11px">${esc(modeSummary)}</span>` : '');
+              statusCell = `<span class="ok" style="font-size:12px">✓ OK</span>` +
+                (modeSummary ? `<span class="muted" style="font-size:11px">${esc(modeSummary)}</span>` : '');
             }
           }
         }
@@ -980,8 +1123,7 @@
       const trainField = c.type === 'ONBOARD'
         ? `<input value="${esc(c.trainSlug)}" list="trainSlugOptions" placeholder="Select or type train slug" oninput="cameras[${i}].trainSlug=this.value" onchange="renderCameras()" />
            <div class="field-note ${c.trainSlug ? 'ok' : 'warn'}">${esc(v.trainMsg)}</div>`
-        : `<input value="" placeholder="Only for ONBOARD" disabled />
-           <div class="field-note ok">${esc(v.trainMsg)}</div>`;
+        : '';
 
       // ── Resolution dropdown ───────────────────────────────────────────────
       // Build list of unique WxH options from caps if available, otherwise
@@ -1072,32 +1214,59 @@
 
       const showCapsHint = !isIP && modes.length === 0;
 
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>
-          <input value="${esc(c.label)}" placeholder="Main camera" oninput="cameras[${i}].label=this.value" onchange="renderCameras()" />
-          <div class="field-note ${v.nameOk ? 'ok' : 'warn'}">${esc(v.nameMsg)}</div>
-          ${v.id ? `<span class="inline-help">Internal ID: <span class="kbd">${esc(v.id)}</span></span>` : ''}
-        </td>
-        <td><select onchange="cameras[${i}].type=this.value; if (this.value !== 'ONBOARD') cameras[${i}].trainSlug=''; renderCameras()">${typeOpts}</select></td>
-        <td>
-          <select onchange="cameras[${i}].source=this.value; if(this.value!=='rtsp') cameras[${i}].rtspTransport=''; renderCameras()">${sourceOpts}</select>
-          ${isIP ? `<div class="field-note ok" style="font-size:11px">${source === 'http_mjpeg' ? 'ESP32-CAM /stream' : 'RTSP — ESP32/Pi/NVR'}</div>` : ''}
-        </td>
-        <td>${deviceCell}</td>
-        <td>
-          <select onchange="(function(v){ const p=v.split('x'); cameras[${i}].width=Number(p[0])||0; cameras[${i}].height=Number(p[1])||0; renderCameras(); })(this.value)">${resOpts}</select>
-          ${showCapsHint ? '<div class="field-note warn" style="font-size:11px">Check cameras to see supported modes</div>' : ''}
-          ${isIP ? '<div class="field-note ok" style="font-size:11px">Applied as resize hint after decode</div>' : ''}
-        </td>
-        <td>
-          <select onchange="cameras[${i}].fps=Number(this.value); renderCameras()">${fpsOpts}</select>
-        </td>
-        <td>${trainField}</td>
-        <td style="white-space:nowrap;min-width:120px">${statusCell}</td>
-        <td><button class="small danger" onclick="removeCamera(${i})">Remove</button></td>
+      const card = document.createElement('div');
+      card.className = 'camera-card';
+      card.innerHTML = `
+        <div class="camera-card-top">
+          <div class="field field-name">
+            <label>Camera name</label>
+            <input value="${esc(c.label)}" placeholder="Main camera" oninput="cameras[${i}].label=this.value" onchange="renderCameras()" />
+            <div class="field-note ${v.nameOk ? 'ok' : 'warn'}">${esc(v.nameMsg)}</div>
+            ${v.id ? `<span class="inline-help">Internal ID: <span class="kbd">${esc(v.id)}</span></span>` : ''}
+          </div>
+          <div class="field field-type">
+            <label>Type</label>
+            <select onchange="cameras[${i}].type=this.value; if (this.value !== 'ONBOARD') cameras[${i}].trainSlug=''; renderCameras()">${typeOpts}</select>
+          </div>
+          <div class="field field-source">
+            <label>Source</label>
+            <select onchange="cameras[${i}].source=this.value; if(this.value!=='rtsp') cameras[${i}].rtspTransport=''; renderCameras()">${sourceOpts}</select>
+            ${isIP ? `<div class="field-note ok" style="font-size:11px">${source === 'http_mjpeg' ? 'ESP32-CAM /stream' : 'RTSP — ESP32/Pi/NVR'}</div>` : ''}
+          </div>
+          <div class="field-remove">
+            <button class="small danger" onclick="removeCamera(${i})">Remove</button>
+          </div>
+        </div>
+
+        <div class="field camera-card-device">
+          <label>Device / URL</label>
+          ${deviceCell}
+        </div>
+
+        <div class="camera-card-grid">
+          <div class="field">
+            <label>Resolution</label>
+            <select onchange="(function(v){ const p=v.split('x'); cameras[${i}].width=Number(p[0])||0; cameras[${i}].height=Number(p[1])||0; renderCameras(); })(this.value)">${resOpts}</select>
+            ${showCapsHint ? '<div class="field-note warn" style="font-size:11px">Check cameras to see supported modes</div>' : ''}
+            ${isIP ? '<div class="field-note ok" style="font-size:11px">Applied as resize hint after decode</div>' : ''}
+          </div>
+          <div class="field">
+            <label>FPS</label>
+            <select onchange="cameras[${i}].fps=Number(this.value); renderCameras()">${fpsOpts}</select>
+          </div>
+          ${c.type === 'ONBOARD' ? `
+          <div class="field">
+            <label>Train (ONBOARD only)</label>
+            ${trainField}
+          </div>` : ''}
+        </div>
+
+        <div class="camera-card-status-row">
+          <span class="status-tag">Status</span>
+          ${statusCell}
+        </div>
       `;
-      tbody.appendChild(tr);
+      container.appendChild(card);
     });
   }
 
@@ -1215,10 +1384,9 @@
       $('allowControl').value = String(!!cfg.allowControl);
       $('backendUrl').value   = cfg.backendUrl   ?? 'http://localhost:8080';
       $('backendWsUrl').value = cfg.backendWsUrl ?? defaultWsFromBackend(cfg.backendUrl ?? '');
-      $('username').value     = cfg.username     ?? '';
-      $('password').value     = cfg.password     ?? '';
       $('dccExPort').value     = cfg.dccEx?.port ?? '/dev/ttyUSB0';
       $('mqttBrokerUrl').value = cfg.mqtt?.brokerUrl ?? 'tcp://localhost:1883';
+      $('audioDevice').value  = cfg.audioDevice  ?? '';
       $('janusUrl').value     = cfg.janusUrl     ?? defaultJanusFromBackend(cfg.backendUrl ?? '');
       $('forceRelay').value   = cfg.forceRelay === true ? 'true' : cfg.forceRelay === false ? 'false' : '';
       $('videoCodec').value   = cfg.videoCodec   ?? 'h264';
@@ -1312,8 +1480,6 @@
     payload.allowControl = $('allowControl').value === 'true';
     payload.backendUrl   = backendUrl;
     payload.backendWsUrl = $('backendWsUrl').value.trim() || defaultWsFromBackend(backendUrl);
-    payload.username     = $('username').value.trim();
-    payload.password     = $('password').value;
 
     payload.dccEx = {
       ...(payload.dccEx || {}),
@@ -1329,6 +1495,7 @@
     };
 
     payload.janusUrl     = $('janusUrl').value.trim()  || defaultJanusFromBackend(backendUrl);
+    payload.audioDevice  = $('audioDevice').value.trim();
     payload.forceRelay   = $('forceRelay').value === '' ? null : ($('forceRelay').value === 'true');
     payload.videoCodec   = $('videoCodec').value;
     payload.h264Encoder  = $('h264Encoder').value;
@@ -1521,6 +1688,15 @@
       $('stLayout').textContent = s.layoutId ?? '—';
       $('stLayout').className   = 'muted';
 
+      // Paired indicator — show when connected and layoutId is set
+      const pairedItem = $('stPairedItem');
+      if (stompOk && s.layoutId) {
+        $('stPairedId').textContent = s.layoutId;
+        pairedItem.style.display = '';
+      } else {
+        pairedItem.style.display = 'none';
+      }
+
       // Phase — only visible during startup; hidden once agent is ready
       if (s.phase) {
         $('stPhaseItem').style.display = '';
@@ -1542,6 +1718,10 @@
       } else {
         banner.style.display = 'none';
       }
+
+      // Update pairing banner based on connection state
+      const agentConnected = s.stompConnected === true && s.degraded !== true;
+      updatePairingBanner(agentConnected);
 
       renderStreamStatus(s);
 
@@ -1620,6 +1800,174 @@
     $( id).addEventListener('change', onVideoSettingChange);
   });
   $('preferMjpg').addEventListener('change', onVideoSettingChange);
+
+
+  // ── Pairing banner ────────────────────────────────────────────────────────
+  // ── Pairing banner logic ─────────────────────────────────────────────────
+  // The banner shows whenever the agent is not successfully connected
+  // (stompConnected=false or degraded). It shows the pairing code if one
+  // is active, otherwise offers a button to start the pairing process.
+  // This is checked on every status poll rather than a separate poll loop.
+
+  let pairingActive = false;
+  let lastPairCode  = '';
+
+  async function refreshPairCode() {
+    try {
+      const res = await fetch('/api/pair-code');
+      if (!res.ok) return '';
+      const data = await res.json();
+      return data.pairingCode || '';
+    } catch { return ''; }
+  }
+
+  // Copies the pairing code to the clipboard. The agent UI is typically
+  // served over plain http:// on a LAN IP rather than https:// or
+  // localhost, and navigator.clipboard requires a "secure context" — so on
+  // many browsers it's simply unavailable here. Fall back to the legacy
+  // execCommand('copy') approach (via a temporary, focused, selected input)
+  // in that case, which still works over plain HTTP.
+  async function copyPairingCode() {
+    const code = ($('pairCodeDisplay').textContent || '').trim();
+    if (!code || code === '——————' || code === '……') return;
+
+    const btn = $('pairCodeCopyBtn');
+    const showCopied = () => {
+      if (!btn) return;
+      const original = btn.textContent;
+      btn.textContent = '✓ Copied';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    };
+
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(code);
+        showCopied();
+        return;
+      }
+      throw new Error('clipboard API unavailable');
+    } catch {
+      try {
+        const tmp = document.createElement('textarea');
+        tmp.value = code;
+        tmp.style.position = 'fixed';
+        tmp.style.opacity = '0';
+        document.body.appendChild(tmp);
+        tmp.focus();
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+        showCopied();
+      } catch {
+        if (btn) btn.textContent = 'Select code above';
+      }
+    }
+  }
+
+  async function updatePairingBanner(agentConnected) {
+    const banner    = $('pairBanner');
+    const display   = $('pairCodeDisplay');
+    const pairedMsg = $('pairPairedMsg');
+    const startBtn  = $('pairStartBtn');
+    const codeBlock = $('pairCodeBlock');
+
+    if (agentConnected) {
+      // Agent is healthy — hide the banner unless we just completed pairing
+      if (pairingActive) {
+        pairedMsg.style.display = 'block';
+        pairingActive = false;
+        setTimeout(() => {
+          banner.classList.remove('visible');
+          pairedMsg.style.display = 'none';
+          loadConfig({ silent: true });
+        }, 2500);
+      } else {
+        banner.classList.remove('visible');
+      }
+      return;
+    }
+
+    // Agent is not connected — show the banner
+    banner.classList.add('visible');
+    pairedMsg.style.display = 'none';
+
+    const code = await refreshPairCode();
+
+    if (code) {
+      // Pairing loop is running — show the code
+      lastPairCode = code;
+      pairingActive = true;
+      display.textContent = code;
+      codeBlock.style.display = 'block';
+      startBtn.style.display  = 'none';
+    } else if (pairingActive && !code) {
+      // Code just disappeared mid-session — loop ended unexpectedly, show start button
+      pairingActive = false;
+      codeBlock.style.display = 'none';
+      startBtn.style.display  = 'block';
+    } else {
+      // Not yet pairing — show the start button
+      codeBlock.style.display = 'none';
+      startBtn.style.display  = 'block';
+    }
+  }
+
+  async function startPairing() {
+    // Clear agentToken so the agent enters pairing mode on restart
+    try {
+      const res = await fetch('/api/config', { cache: 'no-store' });
+      if (!res.ok) { alert('Could not load config.'); return; }
+      const cfg = await res.json();
+      delete cfg._revision;
+      cfg.agentToken = '';
+      const revision = res.headers.get('X-Config-Revision') || '';
+      const headers  = { 'Content-Type': 'application/json' };
+      if (revision) headers['X-Config-Revision'] = revision;
+      const putRes = await fetch('/api/config?restart=1', {
+        method: 'PUT', headers, body: JSON.stringify(cfg)
+      });
+      if (putRes.ok) {
+        $('pairStartBtn').style.display  = 'none';
+        $('pairCodeDisplay').textContent = '……';
+        $('pairCodeBlock').style.display = 'block';
+        setTimeout(() => location.reload(), 2500);
+      } else {
+        alert('Failed to initiate pairing: ' + await putRes.text());
+      }
+    } catch(e) {
+      alert('Error: ' + e.message);
+    }
+  }
+
+  // triggerRepair is the "Already paired? Generate new code" path —
+  // same as startPairing but called when already paired and wanting to re-pair.
+  async function triggerRepair() { await startPairing(); }
+
+  async function unpairAgent() {
+    if (!confirm('Unpair this agent? It will restart and show a new pairing code.')) return;
+    try {
+      const res = await fetch('/api/config', { cache: 'no-store' });
+      if (!res.ok) { alert('Could not load config.'); return; }
+      const cfg = await res.json();
+      delete cfg._revision;
+      cfg.agentToken = '';
+      cfg.layoutId   = '';
+      const revision = res.headers.get('X-Config-Revision') || '';
+      const headers  = { 'Content-Type': 'application/json' };
+      if (revision) headers['X-Config-Revision'] = revision;
+      const putRes = await fetch('/api/config?restart=1', {
+        method: 'PUT', headers, body: JSON.stringify(cfg)
+      });
+      if (putRes.ok) {
+        $('stPairedItem').style.display = 'none';
+        setTimeout(() => location.reload(), 2000);
+      } else {
+        alert('Unpair failed: ' + await putRes.text());
+      }
+    } catch(e) {
+      alert('Error: ' + e.message);
+    }
+  }
 
   loadConfig();
   pollStatus();

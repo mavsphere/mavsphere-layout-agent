@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"sync"
 	"time"
 
@@ -300,13 +301,13 @@ func (s *Session) Run(ctx context.Context, initialToken string) {
 						rateLimitedUntil = now.Add(wait)
 						s.logger.Printf("[STOMP] token refresh rate limited — pausing until %s (%v)",
 							rateLimitedUntil.Format("15:04:05"), wait.Round(time.Second))
-					} else if errors.Is(rErr, auth.ErrBadCredentials) {
-						s.logger.Printf("[STOMP] token refresh: bad credentials — not retrying (fix config and restart)")
-						// Park — wrong credentials will never succeed.
-						select {
-						case <-ctx.Done():
-							return
-						}
+					} else if errors.Is(rErr, auth.ErrTokenRevoked) {
+						s.logger.Printf("[STOMP] token refresh: agent token revoked — restarting into pairing mode")
+						// Don't duplicate the clear-token-and-save logic here; just exit
+						// and let the next startup's auth.Login() call hit the same
+						// ErrTokenRevoked path in main.go, which clears the token and
+						// restarts into pairing.
+						os.Exit(0)
 					} else {
 						s.logger.Printf("[STOMP] token refresh failed: %v", rErr)
 					}

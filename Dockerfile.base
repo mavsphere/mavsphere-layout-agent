@@ -40,6 +40,7 @@ RUN set -eux; \
     libsrtp2-dev libdrm-dev libunwind-dev libv4l-dev \
     libsoup-3.0-dev \
     libnice-dev \
+    libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavfilter-dev \
   ; \
   rm -rf /var/lib/apt/lists/*
 
@@ -56,7 +57,7 @@ RUN set -eux; \
   export LD_LIBRARY_PATH="$PREFIX/lib:${LD_LIBRARY_PATH:-}"; \
   export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib/aarch64-linux-gnu/pkgconfig:$PREFIX/lib/x86_64-linux-gnu/pkgconfig:$PREFIX/share/pkgconfig:${PKG_CONFIG_PATH:-}"; \
   \
-  for mod in gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly; do \
+  for mod in gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav; do \
     echo "===== BUILDING $mod ====="; \
     curl -fsSL -o "${mod}.tar.xz" "https://gstreamer.freedesktop.org/src/${mod}/${mod}-${GST_VERSION}.tar.xz"; \
     tar -xf "${mod}.tar.xz"; \
@@ -70,6 +71,10 @@ RUN set -eux; \
       meson setup build \
         --prefix="$PREFIX" --libdir=lib \
         -Ddefault_library=shared -Dtests=disabled -Dgpl=enabled -Dx264=enabled; \
+    elif [ "$mod" = "gst-libav" ]; then \
+      meson setup build \
+        --prefix="$PREFIX" --libdir=lib \
+        -Ddefault_library=shared -Dtests=disabled; \
     else \
       meson setup build \
         --prefix="$PREFIX" --libdir=lib \
@@ -106,6 +111,7 @@ RUN set -eux; \
   gst-inspect-1.0 vp8enc    >/dev/null; \
   gst-inspect-1.0 jpegdec   >/dev/null; \
   gst-inspect-1.0 x264enc   >/dev/null; \
+  gst-inspect-1.0 avdec_h264 >/dev/null; \
   echo "GStreamer build verified"
 
 # ============================================================
@@ -165,6 +171,7 @@ RUN set -eux; \
     libopus0 libvorbis0a libvorbisenc2 libtheora0 libspeex1 libmp3lame0 \
     libasound2t64 v4l-utils alsa-utils \
     libnice10 \
+    libavcodec60 libavformat60 libavutil58 libswscale7 libavfilter9 \
   ; \
   rm -rf /var/lib/apt/lists/*
 
@@ -195,6 +202,7 @@ RUN set -eux; \
   gst-inspect-1.0 webrtcbin         >/dev/null; \
   gst-inspect-1.0 janusvrwebrtcsink >/dev/null; \
   gst-inspect-1.0 rtpgccbwe         >/dev/null; \
+  gst-inspect-1.0 avdec_h264        >/dev/null; \
   echo "Base image GStreamer verify OK"
 
 RUN mkdir -p /opt/mavsphere-layout-agent /config
