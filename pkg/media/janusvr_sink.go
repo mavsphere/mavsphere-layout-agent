@@ -101,10 +101,10 @@ func NewManager(conf *cfg.AgentConfig, videoDev, audioDev string, logger *log.Lo
 // NewIPSourceManager creates a Manager that pulls video from an IP stream
 // (RTSP or HTTP-MJPEG) rather than a local V4L2 device.
 //
-//   source    – cfg.CameraSourceRTSP or cfg.CameraSourceHTTPMJPEG
-//   url       – full stream URL
-//   transport – rtspsrc protocols value ("tcp", "udp", "auto" …); ignored for HTTP-MJPEG
-//   bufferMs  – latency buffer in ms (0 = built-in default)
+//	source    – cfg.CameraSourceRTSP or cfg.CameraSourceHTTPMJPEG
+//	url       – full stream URL
+//	transport – rtspsrc protocols value ("tcp", "udp", "auto" …); ignored for HTTP-MJPEG
+//	bufferMs  – latency buffer in ms (0 = built-in default)
 func NewIPSourceManager(conf *cfg.AgentConfig, source, url, transport string, bufferMs int, logger *log.Logger) *Manager {
 	return &Manager{
 		conf:        conf,
