@@ -7,10 +7,18 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/mavsphere/mavsphere-layout-agent/pkg/config"
 	agentmedia "github.com/mavsphere/mavsphere-layout-agent/pkg/media"
 )
+
+// deviceRestartDelay is the minimum time to wait between stopping and restarting
+// a pipeline on the same V4L2 device. The Linux kernel can take a moment to
+// fully release a V4L2 node after the GStreamer process exits — even though
+// gracefulTerminate blocks until the process has actually exited, the inode
+// lock can linger. 2s matches the V4L2-busy extra sleep in janusvr_sink.go.
+const deviceRestartDelay = 2 * time.Second
 
 // CameraManager owns one stream.Manager per camera, started on demand.
 type CameraManager struct {
@@ -26,6 +34,11 @@ type CameraManager struct {
 	// V4L2 device locks when pipelines crash on audio-open failure.
 	audioDevice string
 	audioOwner  string // cameraSlug that currently holds the ALSA device, or ""
+
+	// deviceLastStopped tracks the last time each V4L2 device path was freed.
+	// StartCamera checks this and waits if the device was stopped too recently.
+	// Key: device path (e.g. "/dev/video0"). RTSP/IP cameras are never keyed here.
+	deviceLastStopped map[string]time.Time
 }
 
 func NewCameraManager(_ *config.AgentConfig, audioDevice string, logger *log.Logger) *CameraManager {
@@ -33,9 +46,10 @@ func NewCameraManager(_ *config.AgentConfig, audioDevice string, logger *log.Log
 	// config.Get() at the point of use so that resolution/codec changes saved
 	// via the web UI are reflected in new pipelines without a full restart.
 	return &CameraManager{
-		managers:    make(map[string]*agentmedia.Manager),
-		logger:      logger,
-		audioDevice: audioDevice,
+		managers:          make(map[string]*agentmedia.Manager),
+		logger:            logger,
+		audioDevice:       audioDevice,
+		deviceLastStopped: make(map[string]time.Time),
 	}
 }
 
@@ -80,14 +94,30 @@ func (m *CameraManager) StartCamera(ctx context.Context, cameraSlug string, room
 		}
 		mgr = agentmedia.NewIPSourceManager(&camCfg, cam.Source, cam.RTSPURL, cam.RTSPTransport, cam.BufferMs, m.logger)
 	default:
-		// USB / V4L2. Only pass the audio device to this camera if:
+		// USB / V4L2. Enforce minimum restart delay per device to prevent V4L2-busy
+		// errors caused by the kernel inode lock lingering after process exit.
+		device := cam.Device
+		if lastStop, ok := m.deviceLastStopped[device]; ok {
+			sinceStop := time.Since(lastStop)
+			if sinceStop < deviceRestartDelay {
+				wait := deviceRestartDelay - sinceStop
+				m.logger.Printf("[CamMgr] camera=%s device=%s stopped %v ago — waiting %v before restart",
+					cameraSlug, device, sinceStop.Round(time.Millisecond), wait.Round(time.Millisecond))
+				m.mu.Unlock()
+				time.Sleep(wait)
+				m.mu.Lock()
+				// Re-check: another goroutine may have started this camera while we waited.
+				if _, ok := m.managers[cameraSlug]; ok {
+					m.logger.Printf("[CamMgr] %s started by another goroutine while waiting — ignoring START", cameraSlug)
+					return nil
+				}
+			}
+		}
+
+		// Only pass the audio device to this camera if:
 		//   1. An audio device is configured globally, and
 		//   2. Per-camera audioDisable is not set, and
 		//   3. No other camera is already holding ALSA (audioOwner is empty).
-		// This ensures all cameras can publish video simultaneously — ALSA is
-		// exclusive-open and giving it to every pipeline causes the second
-		// camera's GStreamer process to crash on audio open, which in turn
-		// corrupts the V4L2 device state and blocks all subsequent attempts.
 		audioDev := ""
 		if m.audioDevice != "" && !cam.AudioDisable && m.audioOwner == "" {
 			audioDev = m.audioDevice
@@ -96,7 +126,7 @@ func (m *CameraManager) StartCamera(ctx context.Context, cameraSlug string, room
 		} else if m.audioDevice != "" && !cam.AudioDisable && m.audioOwner != "" {
 			m.logger.Printf("[CamMgr] camera=%s starting video-only (audio held by camera=%s)", cameraSlug, m.audioOwner)
 		}
-		mgr = agentmedia.NewManager(&camCfg, cam.Device, audioDev, m.logger)
+		mgr = agentmedia.NewManager(&camCfg, device, audioDev, m.logger)
 	}
 	mgr.SetICE(ctx, ice)
 
@@ -118,18 +148,52 @@ func (m *CameraManager) StopCamera(cameraSlug string) {
 		return
 	}
 	delete(m.managers, cameraSlug)
-	// Deliberately do NOT release audioOwner here. Audio ownership is fixed for
-	// the lifetime of the agent session (until StopAll). Releasing it on individual
-	// camera stops would allow a subsequent StartCamera to claim ALSA while the
-	// stopping camera's GStreamer process is still tearing down, causing the same
-	// V4L2-busy race condition the audioOwner scheme was introduced to prevent.
-	// The audio room architecture (see AUDIO_ROOM_ARCHITECTURE.md) will supersede
-	// this entirely — at that point audioOwner is removed.
+
+	// Record which device this camera was using and whether it held audio,
+	// so we can enforce a restart delay and release audio ownership correctly.
+	cfg := config.Get()
+	cam := findCamera(cfg, cameraSlug)
+	var devicePath string
+	var wasAudioOwner bool
+	if cam != nil {
+		switch cam.Source {
+		case config.CameraSourceRTSP, config.CameraSourceHTTPMJPEG:
+			// IP cameras don't use V4L2 — no device restart delay needed.
+		default:
+			devicePath = cam.Device
+		}
+	}
+	wasAudioOwner = (m.audioOwner == cameraSlug)
 	m.mu.Unlock()
 
-	// Stop outside the lock: Manager.Stop() acquires its own internal mutex.
+	// Stop outside the lock: Manager.Stop() acquires its own internal mutex
+	// and blocks until the GStreamer process has fully exited.
 	mgr.Stop()
 	m.logger.Printf("[CamMgr] stopped stream for camera=%s", cameraSlug)
+
+	// Record the stop time for this V4L2 device. StartCamera will wait if the
+	// device was stopped less than deviceRestartDelay ago.
+	if devicePath != "" {
+		m.mu.Lock()
+		m.deviceLastStopped[devicePath] = time.Now()
+		m.mu.Unlock()
+	}
+
+	// Release audio ownership after a delay so the ALSA device has time to
+	// fully release before the next camera claims it. We do NOT release
+	// immediately because although the GStreamer process has exited, the ALSA
+	// device can have a brief kernel-side lock. The delay matches deviceRestartDelay.
+	if wasAudioOwner {
+		go func() {
+			time.Sleep(deviceRestartDelay)
+			m.mu.Lock()
+			if m.audioOwner == cameraSlug {
+				m.audioOwner = ""
+				m.logger.Printf("[CamMgr] camera=%s released audio ownership", cameraSlug)
+			}
+			m.mu.Unlock()
+		}()
+	}
 }
 
 // StopAll tears down every active stream (called on STOMP disconnect or shutdown).
@@ -143,6 +207,7 @@ func (m *CameraManager) StopAll() {
 	}
 	m.managers = make(map[string]*agentmedia.Manager)
 	m.audioOwner = ""
+	m.deviceLastStopped = make(map[string]time.Time)
 	m.mu.Unlock()
 
 	// Stop outside the lock so Manager.Stop() can acquire its own mutex freely.
