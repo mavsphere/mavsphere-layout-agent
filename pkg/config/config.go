@@ -59,6 +59,13 @@ type CameraConfig struct {
 	Width  int `json:"width,omitempty"`
 	Height int `json:"height,omitempty"`
 	Fps    int `json:"fps,omitempty"`
+
+	// AudioDisable suppresses audio capture for this specific camera.
+	// When true the GStreamer pipeline is built without alsasrc regardless of
+	// the global AudioDevice setting. This allows all cameras to publish
+	// video simultaneously without competing for the single shared ALSA device.
+	// The UI/agent web UI exposes this as a per-camera toggle.
+	AudioDisable bool `json:"audioDisable,omitempty"`
 }
 
 type TrainConfig struct {

@@ -20,10 +20,12 @@ type CameraManager struct {
 
 	// audioDevice is the single ALSA capture device (if any) shared across
 	// all cameras, resolved once at agent startup (auto-detected or set via
-	// config.AudioDevice). Whichever camera stream starts first claims it;
-	// the underlying GStreamer pipeline already falls back to video-only
-	// automatically if a second camera finds it busy.
+	// config.AudioDevice). ALSA is exclusive-open — only one GStreamer pipeline
+	// can hold it at a time. audioOwner tracks which camera currently holds it;
+	// all others get video-only pipelines to prevent ALSA contention causing
+	// V4L2 device locks when pipelines crash on audio-open failure.
 	audioDevice string
+	audioOwner  string // cameraSlug that currently holds the ALSA device, or ""
 }
 
 func NewCameraManager(_ *config.AgentConfig, audioDevice string, logger *log.Logger) *CameraManager {
@@ -78,8 +80,23 @@ func (m *CameraManager) StartCamera(ctx context.Context, cameraSlug string, room
 		}
 		mgr = agentmedia.NewIPSourceManager(&camCfg, cam.Source, cam.RTSPURL, cam.RTSPTransport, cam.BufferMs, m.logger)
 	default:
-		// USB / V4L2 (default)
-		mgr = agentmedia.NewManager(&camCfg, cam.Device, m.audioDevice, m.logger)
+		// USB / V4L2. Only pass the audio device to this camera if:
+		//   1. An audio device is configured globally, and
+		//   2. Per-camera audioDisable is not set, and
+		//   3. No other camera is already holding ALSA (audioOwner is empty).
+		// This ensures all cameras can publish video simultaneously — ALSA is
+		// exclusive-open and giving it to every pipeline causes the second
+		// camera's GStreamer process to crash on audio open, which in turn
+		// corrupts the V4L2 device state and blocks all subsequent attempts.
+		audioDev := ""
+		if m.audioDevice != "" && !cam.AudioDisable && m.audioOwner == "" {
+			audioDev = m.audioDevice
+			m.audioOwner = cameraSlug
+			m.logger.Printf("[CamMgr] camera=%s assigned audio device=%s", cameraSlug, audioDev)
+		} else if m.audioDevice != "" && !cam.AudioDisable && m.audioOwner != "" {
+			m.logger.Printf("[CamMgr] camera=%s starting video-only (audio held by camera=%s)", cameraSlug, m.audioOwner)
+		}
+		mgr = agentmedia.NewManager(&camCfg, cam.Device, audioDev, m.logger)
 	}
 	mgr.SetICE(ctx, ice)
 
@@ -101,6 +118,13 @@ func (m *CameraManager) StopCamera(cameraSlug string) {
 		return
 	}
 	delete(m.managers, cameraSlug)
+	// Deliberately do NOT release audioOwner here. Audio ownership is fixed for
+	// the lifetime of the agent session (until StopAll). Releasing it on individual
+	// camera stops would allow a subsequent StartCamera to claim ALSA while the
+	// stopping camera's GStreamer process is still tearing down, causing the same
+	// V4L2-busy race condition the audioOwner scheme was introduced to prevent.
+	// The audio room architecture (see AUDIO_ROOM_ARCHITECTURE.md) will supersede
+	// this entirely — at that point audioOwner is removed.
 	m.mu.Unlock()
 
 	// Stop outside the lock: Manager.Stop() acquires its own internal mutex.
@@ -118,6 +142,7 @@ func (m *CameraManager) StopAll() {
 		toStop[slug] = mgr
 	}
 	m.managers = make(map[string]*agentmedia.Manager)
+	m.audioOwner = ""
 	m.mu.Unlock()
 
 	// Stop outside the lock so Manager.Stop() can acquire its own mutex freely.

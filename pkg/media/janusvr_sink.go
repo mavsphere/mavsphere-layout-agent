@@ -268,7 +268,12 @@ func (m *Manager) Start(ctx context.Context, roomID int64) error {
 	}
 	if m.cmd != nil {
 		m.gracefulTerminate(m.cmd, "switch_room", 5*time.Second)
-		time.Sleep(300 * time.Millisecond)
+		// Wait for hardware devices (V4L2, ALSA) to be released by the dying
+		// process. gracefulTerminate already waits for process exit via procDone,
+		// but the kernel can take a moment after process exit to release V4L2/ALSA.
+		// 1.5s is enough on tested hardware; 300ms was not — it caused every
+		// subsequent attempt in the new stream's runLoop to see V4L2 busy.
+		time.Sleep(1500 * time.Millisecond)
 		m.cmd = nil
 		m.procDone = nil
 	}
@@ -407,6 +412,7 @@ func (m *Manager) runLoop(ctx context.Context, roomID int64, stopCh chan struct{
 
 		var lastErr error
 		var startedOK bool
+		v4l2BusyStreak := 0 // consecutive attempts that failed solely due to V4L2 busy
 
 		for i, a := range attempts {
 			pipeline := m.buildPipelineForAttempt(roomID, a, !disableAudio.Load())
@@ -745,6 +751,20 @@ func (m *Manager) runLoop(ctx context.Context, roomID int64, stopCh chan struct{
 				if v4l2BusySeen.Load() {
 					m.logf("[video] V4L2 busy was observed; sleeping extra %v before retry", v4l2BusyDelayAfterExit)
 					time.Sleep(v4l2BusyDelayAfterExit)
+					v4l2BusyStreak++
+				} else {
+					v4l2BusyStreak = 0
+				}
+
+				// If V4L2 has been busy on every attempt so far (≥4 consecutive),
+				// the device is genuinely still held by a dying pipeline — stop
+				// grinding through all 24 permutations and let the outer backoff
+				// handle the wait. Without this, switching cameras could waste
+				// ~3 minutes cycling through every codec/resolution combination.
+				if v4l2BusyStreak >= 4 {
+					m.logf("[video] V4L2 busy on %d consecutive attempts — aborting inner loop, will retry after outer backoff", v4l2BusyStreak)
+					lastErr = fmt.Errorf("V4L2 device busy after %d consecutive attempts", v4l2BusyStreak)
+					break
 				}
 
 				if elapsed < quickFailWindow && i < len(attempts)-1 {
