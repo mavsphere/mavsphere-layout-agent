@@ -29,11 +29,23 @@ type CameraManager struct {
 	// audioDevice is the single ALSA capture device (if any) shared across
 	// all cameras, resolved once at agent startup (auto-detected or set via
 	// config.AudioDevice). ALSA is exclusive-open — only one GStreamer pipeline
-	// can hold it at a time. audioOwner tracks which camera currently holds it;
-	// all others get video-only pipelines to prevent ALSA contention causing
-	// V4L2 device locks when pipelines crash on audio-open failure.
-	audioDevice string
-	audioOwner  string // cameraSlug that currently holds the ALSA device, or ""
+	// can hold it at a time, so only one camera is ever allowed to request it.
+	//
+	// audioCameraSlug is that designated camera: whichever eligible camera
+	// (audio configured, not AudioDisable'd) is the first to start after the
+	// manager was created or last fully idled. It is sticky — once set it does
+	// NOT change just because that camera is briefly stopped (e.g. the viewer
+	// switches to a different feed and back). All other cameras always get
+	// video-only pipelines, even if the designated camera happens to be
+	// stopped at the moment they start, so audio never drifts onto a
+	// different camera mid-session.
+	//
+	// audioOwner tracks whether the designated camera's pipeline is currently
+	// actually holding the ALSA device (it can be empty even when
+	// audioCameraSlug is set, if that camera is momentarily stopped).
+	audioDevice     string
+	audioCameraSlug string // camera permanently designated to own audio this session, or ""
+	audioOwner      string // cameraSlug that currently holds the ALSA device, or ""
 
 	// deviceLastStopped tracks the last time each V4L2 device path was freed.
 	// StartCamera checks this and waits if the device was stopped too recently.
@@ -117,14 +129,27 @@ func (m *CameraManager) StartCamera(ctx context.Context, cameraSlug string, room
 		// Only pass the audio device to this camera if:
 		//   1. An audio device is configured globally, and
 		//   2. Per-camera audioDisable is not set, and
-		//   3. No other camera is already holding ALSA (audioOwner is empty).
+		//   3. This camera IS (or is about to become) the session's designated
+		//      audio camera. The designation is made once, on the first
+		//      eligible camera to start, and stays pinned to it — it is NOT
+		//      re-evaluated each time some other camera happens to find
+		//      audioOwner empty. That "whoever's free wins" approach is what
+		//      let audio drift off "main" onto whichever camera the viewer
+		//      happened to be on when the previous owner's release delay
+		//      expired. See manager struct docs above.
 		audioDev := ""
-		if m.audioDevice != "" && !cam.AudioDisable && m.audioOwner == "" {
-			audioDev = m.audioDevice
-			m.audioOwner = cameraSlug
-			m.logger.Printf("[CamMgr] camera=%s assigned audio device=%s", cameraSlug, audioDev)
-		} else if m.audioDevice != "" && !cam.AudioDisable && m.audioOwner != "" {
-			m.logger.Printf("[CamMgr] camera=%s starting video-only (audio held by camera=%s)", cameraSlug, m.audioOwner)
+		if m.audioDevice != "" && !cam.AudioDisable {
+			if m.audioCameraSlug == "" {
+				m.audioCameraSlug = cameraSlug
+				m.logger.Printf("[CamMgr] camera=%s designated as this session's audio camera", cameraSlug)
+			}
+			if cameraSlug == m.audioCameraSlug {
+				audioDev = m.audioDevice
+				m.audioOwner = cameraSlug
+				m.logger.Printf("[CamMgr] camera=%s assigned audio device=%s", cameraSlug, audioDev)
+			} else {
+				m.logger.Printf("[CamMgr] camera=%s starting video-only (audio reserved for camera=%s)", cameraSlug, m.audioCameraSlug)
+			}
 		}
 		mgr = agentmedia.NewManager(&camCfg, device, audioDev, m.logger)
 	}
@@ -179,10 +204,14 @@ func (m *CameraManager) StopCamera(cameraSlug string) {
 		m.mu.Unlock()
 	}
 
-	// Release audio ownership after a delay so the ALSA device has time to
-	// fully release before the next camera claims it. We do NOT release
-	// immediately because although the GStreamer process has exited, the ALSA
-	// device can have a brief kernel-side lock. The delay matches deviceRestartDelay.
+	// Release "currently holding" status after a delay so the ALSA device has
+	// time to fully release before the designated audio camera reclaims it on
+	// restart. We do NOT release immediately because although the GStreamer
+	// process has exited, the ALSA device can have a brief kernel-side lock.
+	// The delay matches deviceRestartDelay. Note this only clears audioOwner
+	// (who currently holds the device) — it deliberately does NOT clear
+	// audioCameraSlug (who is allowed to hold it), so no other camera can
+	// step in and steal audio while the designated one is briefly stopped.
 	if wasAudioOwner {
 		go func() {
 			time.Sleep(deviceRestartDelay)
@@ -207,6 +236,7 @@ func (m *CameraManager) StopAll() {
 	}
 	m.managers = make(map[string]*agentmedia.Manager)
 	m.audioOwner = ""
+	m.audioCameraSlug = ""
 	m.deviceLastStopped = make(map[string]time.Time)
 	m.mu.Unlock()
 
